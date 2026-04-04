@@ -114,14 +114,16 @@ At episode end, the best reward achieved across all steps is returned.
 
 ## Baseline Scores
 
-Scores from running inference.py against the live HF Space (3 episodes per task):
+Scores from running inference.py against the live HF Space (3 episodes per task, LLM-as-judge active for hard):
 
 | Task | Episodes | Avg Score | Model |
 |------|----------|-----------|-------|
 | easy | 3 | 1.000 | Qwen/Qwen2.5-72B-Instruct |
 | medium | 3 | 1.000 | Qwen/Qwen2.5-72B-Instruct |
-| hard | 3 | 0.907 | Qwen/Qwen2.5-72B-Instruct |
-| **overall** | **9** | **0.969** | Qwen/Qwen2.5-72B-Instruct |
+| hard | 3 | 0.780 | Qwen/Qwen2.5-72B-Instruct |
+| **overall** | **9** | **0.927** | Qwen/Qwen2.5-72B-Instruct |
+
+Hard task uses LLM-as-judge (gpt-4o-mini) for explanation quality scoring, which is stricter than a heuristic baseline. The agent must fix 2-3 simultaneous errors and provide a developer-facing explanation to score high.
 
 ## Setup
 
