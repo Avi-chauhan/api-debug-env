@@ -356,30 +356,40 @@ class APIDebugEnvironment(Environment):
 
         client = OpenAI(base_url=api_base, api_key=api_key)
 
-        error_types = [gt["error_type"] for gt in self.ground_truths]
+        # Include error type + affected fields so the judge evaluates against actual errors
+        gt_summary = [
+            {"error_type": gt["error_type"], "affected_fields": gt.get("affected_fields", [])}
+            for gt in self.ground_truths
+        ]
         prompt = (
-            "Rate this API debugging explanation on a 0.0 to 1.0 scale.\n\n"
-            "Criteria:\n"
-            "- Correctly identifies root cause (0 to 0.4)\n"
-            "- Provides actionable fix guidance (0 to 0.3)\n"
-            "- Includes prevention advice for developers (0 to 0.3)\n\n"
-            f"API: {self.spec['api_name']} {self.spec['endpoint']}\n"
-            f"Errors present: {json.dumps(error_types)}\n"
-            f"Explanation: {explanation}\n\n"
+            "You are grading an AI agent's explanation for debugging a broken API request.\n\n"
+            f"API: {self.spec['api_name']} {self.spec['http_method']} {self.spec['endpoint']}\n"
+            f"Actual errors present:\n{json.dumps(gt_summary, indent=2)}\n\n"
+            f"Agent's explanation:\n{explanation}\n\n"
+            "Score 0.0 to 1.0:\n"
+            "- Root cause: correctly names the error type and affected fields (0 to 0.4)\n"
+            "- Fix guidance: explains the correct remediation (0 to 0.3)\n"
+            "- Developer clarity: actionable and clear for a developer (0 to 0.3)\n\n"
             'Return ONLY a JSON object: {"score": 0.0}'
         )
 
+        # timeout=10 prevents blocking step() if the judge LLM is slow
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=50,
             temperature=0.0,
+            timeout=10,
         )
         text = response.choices[0].message.content or ""
 
-        # Parse score from response
-        result = json.loads(text)
-        raw_score = float(result["score"])
+        # Parse score from response - protected so any bad response falls back to heuristic
+        try:
+            result = json.loads(text)
+            raw_score = float(result["score"])
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            return None
+
         return max(0.0, min(1.0, raw_score))
 
     def _heuristic_score_explanation(self, explanation: str) -> float:
@@ -392,6 +402,8 @@ class APIDebugEnvironment(Environment):
             "because", "should", "instead", "required", "missing",
             "type", "format", "expected", "invalid", "correct",
             "field", "header", "value", "fix", "error",
+            "authorization", "authentication", "schema", "endpoint",
+            "method", "body", "payload", "constraint",
         ]
         keyword_hits = sum(1 for k in keywords if k in explanation.lower())
         keyword_score = min(keyword_hits / 6.0, 1.0)
