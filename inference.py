@@ -279,10 +279,11 @@ async def main() -> None:
     llm_client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
     # Connect to environment (via Docker image or direct URL)
+    # Use longer timeout for HF Spaces (LLM calls can be slow)
     if IMAGE_NAME:
         env = await APIDebugEnv.from_docker_image(IMAGE_NAME)
     else:
-        env = APIDebugEnv(base_url=ENV_URL)
+        env = APIDebugEnv(base_url=ENV_URL, message_timeout_s=120.0)
 
     all_scores: dict = {}
 
@@ -290,7 +291,17 @@ async def main() -> None:
         for task in TASKS:
             task_scores = []
             for ep in range(EPISODES_PER_TASK):
-                score = await run_episode(env, llm_client, task)
+                try:
+                    score = await run_episode(env, llm_client, task)
+                except Exception as exc:
+                    print(f"[DEBUG] Episode failed: {exc}", flush=True)
+                    # Reconnect on WebSocket failure
+                    try:
+                        await env.close()
+                    except Exception:
+                        pass
+                    env = APIDebugEnv(base_url=ENV_URL, message_timeout_s=120.0)
+                    score = 0.0
                 task_scores.append(score)
             avg = sum(task_scores) / len(task_scores)
             all_scores[task] = avg

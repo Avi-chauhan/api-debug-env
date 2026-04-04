@@ -114,13 +114,14 @@ At episode end, the best reward achieved across all steps is returned.
 
 ## Baseline Scores
 
-Scores will be updated after running inference against the live HF Space.
+Scores from running inference.py against the live HF Space (3 episodes per task):
 
 | Task | Episodes | Avg Score | Model |
 |------|----------|-----------|-------|
-| easy | 3 | TBD | Qwen/Qwen2.5-72B-Instruct |
-| medium | 3 | TBD | Qwen/Qwen2.5-72B-Instruct |
-| hard | 3 | TBD | Qwen/Qwen2.5-72B-Instruct |
+| easy | 3 | 1.000 | Qwen/Qwen2.5-72B-Instruct |
+| medium | 3 | 1.000 | Qwen/Qwen2.5-72B-Instruct |
+| hard | 3 | 0.907 | Qwen/Qwen2.5-72B-Instruct |
+| **overall** | **9** | **0.969** | Qwen/Qwen2.5-72B-Instruct |
 
 ## Setup
 
