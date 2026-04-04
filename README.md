@@ -128,14 +128,14 @@ If the LLM judge is unavailable, the environment falls back to a keyword + lengt
 
 Scores from running inference.py against the live HF Space (3 episodes per task, LLM-as-judge active for hard):
 
-| Task | Episodes | Avg Score | Model |
-|------|----------|-----------|-------|
-| easy | 3 | 1.000 | Qwen/Qwen2.5-72B-Instruct |
-| medium | 3 | 1.000 | Qwen/Qwen2.5-72B-Instruct |
-| hard | 3 | 0.780 | Qwen/Qwen2.5-72B-Instruct |
-| **overall** | **9** | **0.927** | Qwen/Qwen2.5-72B-Instruct |
+| Task | Episodes | Qwen2.5-72B-Instruct | gpt-4o-mini |
+|------|----------|----------------------|-------------|
+| easy | 3 | 1.000 | 0.667 |
+| medium | 3 | 1.000 | 1.000 |
+| hard | 3 | 0.780 | 0.760 |
+| **overall** | **9** | **0.927** | **0.809** |
 
-Hard task uses LLM-as-judge (gpt-4o-mini) for explanation quality scoring, which is stricter than a heuristic baseline. The agent must fix 2-3 simultaneous errors and provide a developer-facing explanation to score high.
+Hard task uses LLM-as-judge (gpt-4o-mini) for explanation quality scoring, which is stricter than a heuristic baseline. The agent must fix 2-3 simultaneous errors and provide a developer-facing explanation to score high. Larger models perform better on the hard task, showing meaningful difficulty progression.
 
 ## Setup
 
