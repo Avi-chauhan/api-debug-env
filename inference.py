@@ -27,7 +27,7 @@ from models import APIDebugAction
 
 # Environment variables (mandatory for hackathon evaluation)
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY")
 MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 ENV_URL = os.getenv("ENV_URL") or "https://avichauhan-api-debug-env.hf.space"
 IMAGE_NAME = os.getenv("IMAGE_NAME")
@@ -65,7 +65,7 @@ def log_end(
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
         f"[END] success={str(success).lower()} steps={steps} "
-        f"score={score:.3f} rewards={rewards_str}",
+        f"score={score:.2f} rewards={rewards_str}",
         flush=True,
     )
 
