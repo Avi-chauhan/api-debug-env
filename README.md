@@ -1,3 +1,13 @@
+---
+title: API Debug Environment
+emoji: "🔧"
+colorFrom: blue
+colorTo: purple
+sdk: docker
+pinned: false
+license: mit
+---
+
 # API Debug Environment
 
 An OpenEnv reinforcement learning environment where LLM agents learn to debug malformed API requests. The agent receives a broken request and its API specification, then must diagnose the error, fix the request, and explain the fix.
