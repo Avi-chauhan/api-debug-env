@@ -36,7 +36,7 @@ Each episode allows multiple attempts. Perfect answers on early steps earn full 
 |------|-----------|-----------|--------|---------|
 | easy | Identify error type and affected fields | 3 | 1 | Deterministic: 0.6 x type_match + 0.4 x fields_match |
 | medium | Fix the broken request | 5 | 1 | Deterministic: per-field validation against spec |
-| hard | Fix request + explain for developers | 7 | 2-3 | 70% deterministic fix + 30% LLM-as-judge explanation |
+| hard | Fix request + explain for developers | 7 | 2-3 | 70% deterministic fix + 30% LLM-as-judge explanation (gpt-4o-mini) |
 
 ## Error Types
 
@@ -111,6 +111,18 @@ reward = raw_score x max(1.0 - 0.1 x (step - 1), 0.3)
 - Step 7+: 0.3x floor (agent still gets credit for late fixes)
 
 At episode end, the best reward achieved across all steps is returned.
+
+## Hard Task: LLM-as-Judge
+
+The hard task uses an LLM (gpt-4o-mini via OpenAI API) to evaluate explanation quality. The judge receives the actual ground truth (error types and affected fields) and scores the agent's explanation on three criteria:
+
+| Criterion | Weight | Description |
+|-----------|--------|-------------|
+| Root cause identification | 0.4 | Does the explanation correctly name the error types and affected fields? |
+| Fix guidance | 0.3 | Does it explain the correct remediation? |
+| Developer clarity | 0.3 | Is the explanation actionable and clear for a developer? |
+
+If the LLM judge is unavailable, the environment falls back to a keyword + length heuristic that ensures non-zero scores for reasonable explanations. A 10-second timeout on the judge call prevents blocking the episode if the LLM is slow.
 
 ## Baseline Scores
 
@@ -190,11 +202,12 @@ api-debug-env/
 ├── README.md
 ├── models.py               # APIDebugAction, APIDebugObservation
 ├── client.py               # APIDebugEnv(EnvClient)
+├── validate-submission.sh  # Pre-submission validator
 ├── __init__.py
 └── server/
     ├── __init__.py
     ├── app.py              # FastAPI app via create_app()
-    ├── environment.py      # Core logic: reset(), step(), graders
+    ├── environment.py      # Core logic: reset(), step(), graders + LLM judge
     ├── api_specs.py        # 30 API spec templates
     ├── error_injectors.py  # 10 error injection functions
     └── validators.py       # Field type validation helpers
