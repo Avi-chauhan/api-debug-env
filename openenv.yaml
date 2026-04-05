@@ -3,3 +3,9 @@ version: 0.1.0
 description: API Contract Validation RL environment for debugging malformed API requests
 sdk: docker
 dockerfile: Dockerfile
+tags:
+  - openenv
+  - rl-environment
+  - api-debugging
+  - reinforcement-learning
+  - fastapi

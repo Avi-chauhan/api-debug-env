@@ -20,3 +20,12 @@ server = "server.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

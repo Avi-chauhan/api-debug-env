@@ -6,6 +6,10 @@ colorTo: purple
 sdk: docker
 pinned: false
 license: mit
+tags:
+  - openenv
+  - rl-environment
+  - api-debugging
 ---
 
 # API Debug Environment
@@ -14,11 +18,13 @@ An OpenEnv reinforcement learning environment where LLM agents learn to debug ma
 
 Built for the Meta PyTorch OpenEnv Hackathon x Scaler School of Technology 2026.
 
+## Infinite Unique Scenarios
+
+Unlike fixed-fixture environments where every episode presents the same scenario, this environment generates a unique broken request each episode. With 30 API spec templates across 6 domains and 10 error injection functions, the environment produces thousands of distinct training scenarios. An agent cannot memorize answers after one run - it must learn a generalizable debugging strategy. This is critical for real RL training value: agents learn transferable skills rather than dataset-specific shortcuts.
+
 ## Why This Domain
 
 Developers spend significant time debugging API contract mismatches. Research from Calendar Gym shows that malformed tool arguments caused more than half of agent failures. This environment trains agents to identify and fix these errors systematically.
-
-**Real-world applications:** API gateway validation, automated debugging assistants, developer tooling, CI/CD request validation, LLM tool-use reliability.
 
 ## How It Works
 
