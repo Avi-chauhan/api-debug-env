@@ -27,7 +27,7 @@ from models import APIDebugAction
 
 # Environment variables (mandatory for hackathon evaluation)
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY")
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY") or "no-key"
 MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 ENV_URL = os.getenv("ENV_URL") or "https://avichauhan-api-debug-env.hf.space"
 IMAGE_NAME = os.getenv("IMAGE_NAME")
@@ -281,7 +281,11 @@ async def main() -> None:
     # Connect to environment (via Docker image or direct URL)
     # Use longer timeout for HF Spaces (LLM calls can be slow)
     if IMAGE_NAME:
-        env = await APIDebugEnv.from_docker_image(IMAGE_NAME)
+        try:
+            env = await APIDebugEnv.from_docker_image(IMAGE_NAME)
+        except Exception as exc:
+            print(f"[DEBUG] from_docker_image failed ({exc}), falling back to ENV_URL", flush=True)
+            env = APIDebugEnv(base_url=ENV_URL, message_timeout_s=120.0)
     else:
         env = APIDebugEnv(base_url=ENV_URL, message_timeout_s=120.0)
 
