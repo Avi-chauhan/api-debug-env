@@ -101,7 +101,7 @@ The environment returns an `APIDebugObservation` with:
 | feedback | string | Structured validation feedback from last action |
 | message | string | Human-readable status |
 | done | bool | Whether the episode has ended |
-| reward | float | Reward signal (0.0 to 1.0) |
+| reward | float | Reward signal in open interval (0, 1) |
 
 ## Reward Design
 
@@ -136,10 +136,10 @@ Scores from running inference.py against the live HF Space (3 episodes per task,
 
 | Task | Episodes | Qwen2.5-72B-Instruct | gpt-4o-mini |
 |------|----------|----------------------|-------------|
-| easy | 3 | 1.000 | 0.667 |
-| medium | 3 | 1.000 | 1.000 |
+| easy | 3 | 0.999 | 0.667 |
+| medium | 3 | 0.999 | 0.999 |
 | hard | 3 | 0.780 | 0.760 |
-| **overall** | **9** | **0.927** | **0.809** |
+| **overall** | **9** | **0.926** | **0.809** |
 
 Hard task uses LLM-as-judge (gpt-4o-mini) for explanation quality scoring, which is stricter than a heuristic baseline. The agent must fix 2-3 simultaneous errors and provide a developer-facing explanation to score high. Larger models perform better on the hard task, showing meaningful difficulty progression.
 
@@ -210,6 +210,9 @@ api-debug-env/
 ├── client.py               # APIDebugEnv(EnvClient)
 ├── validate-submission.sh  # Pre-submission validator
 ├── __init__.py
+├── tests/
+│   ├── __init__.py
+│   └── test_environment.py  # 79 unit tests
 └── server/
     ├── __init__.py
     ├── app.py              # FastAPI app via create_app()
