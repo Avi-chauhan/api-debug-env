@@ -59,10 +59,10 @@ def perfect_medium_action(env: APIDebugEnvironment) -> APIDebugAction:
 # ---------------------------------------------------------------------------
 
 class TestEasyGrader:
-    def test_perfect_answer_scores_1(self):
+    def test_perfect_answer_scores_near_1(self):
         env = make_env("easy", seed=42)
         obs = env.step(perfect_easy_action(env))
-        assert obs.reward == 1.0
+        assert obs.reward >= 0.99
 
     def test_correct_type_only_scores_0_6(self):
         env = make_env("easy", seed=42)
@@ -81,17 +81,17 @@ class TestEasyGrader:
         # type score = 0, field jaccard = 1.0, total = 0.4
         assert abs(obs.reward - 0.4) < 0.01
 
-    def test_empty_action_scores_0(self):
+    def test_empty_action_scores_near_0(self):
         env = make_env("easy", seed=42)
         obs = env.step(APIDebugAction())
-        assert obs.reward == 0.0
+        assert obs.reward <= 0.01
 
-    def test_wrong_type_wrong_fields_scores_0(self):
+    def test_wrong_type_wrong_fields_scores_near_0(self):
         env = make_env("easy", seed=42)
         obs = env.step(
             APIDebugAction(error_type="completely_wrong_type", affected_fields=["nonexistent_field"])
         )
-        assert obs.reward == 0.0
+        assert obs.reward <= 0.01
 
     def test_wrong_type_correct_fields_partial_credit(self):
         env = make_env("easy", seed=42)
@@ -192,20 +192,20 @@ class TestMediumGrader:
         obs = env.step(perfect_medium_action(env))
         assert obs.reward >= 0.7
 
-    def test_no_fixed_request_scores_0(self):
+    def test_no_fixed_request_scores_near_0(self):
         env = make_env("medium", seed=42)
         obs = env.step(APIDebugAction())
-        assert obs.reward == 0.0
+        assert obs.reward <= 0.01
 
-    def test_invalid_json_scores_0(self):
+    def test_invalid_json_scores_near_0(self):
         env = make_env("medium", seed=42)
         obs = env.step(APIDebugAction(fixed_request="{broken json{{"))
-        assert obs.reward == 0.0
+        assert obs.reward <= 0.01
 
-    def test_non_dict_json_scores_0(self):
+    def test_non_dict_json_scores_near_0(self):
         env = make_env("medium", seed=42)
         obs = env.step(APIDebugAction(fixed_request='["array", "not", "dict"]'))
-        assert obs.reward == 0.0
+        assert obs.reward <= 0.01
 
     def test_empty_json_object_low_score(self):
         env = make_env("medium", seed=42)
@@ -331,10 +331,10 @@ class TestHardGrader:
         obs = env.step(APIDebugAction(fixed_request=json.dumps(gt["valid_request"])))
         assert obs.reward >= 0.5
 
-    def test_empty_action_hard_scores_0(self):
+    def test_empty_action_hard_scores_near_0(self):
         env = make_env("hard", seed=42)
         obs = env.step(APIDebugAction())
-        assert obs.reward == 0.0
+        assert obs.reward <= 0.01
 
 
 # ---------------------------------------------------------------------------
@@ -489,9 +489,9 @@ class TestStepBehavior:
 
     def test_best_reward_tracks_max(self):
         env = make_env("easy", seed=42)
-        # Step 1: no reward
+        # Step 1: no reward (clamped to 0.001)
         env.step(APIDebugAction())
-        assert env.best_reward == 0.0
+        assert env.best_reward <= 0.01
         # Step 2: partial reward (correct type only)
         gt = env.ground_truths[0]
         env.step(APIDebugAction(error_type=gt["error_type"], affected_fields=[]))

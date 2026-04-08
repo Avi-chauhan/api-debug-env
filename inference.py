@@ -54,7 +54,7 @@ def log_step(
     done_val = str(done).lower()
     error_val = error if error else "null"
     print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} "
+        f"[STEP] step={step} action={action} reward={reward:.4f} "
         f"done={done_val} error={error_val}",
         flush=True,
     )
@@ -63,10 +63,10 @@ def log_step(
 def log_end(
     success: bool, steps: int, score: float, rewards: List[float]
 ) -> None:
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    rewards_str = ",".join(f"{r:.4f}" for r in rewards)
     print(
         f"[END] success={str(success).lower()} steps={steps} "
-        f"score={score:.2f} rewards={rewards_str}",
+        f"score={score:.4f} rewards={rewards_str}",
         flush=True,
     )
 
@@ -251,8 +251,9 @@ async def run_episode(
             break
 
     # Final score is the max reward achieved (environment already tracks best)
-    score = max(rewards) if rewards else 0.0
-    score = min(max(score, 0.0), 1.0)
+    # Clamp to open interval (0, 1) - evaluator rejects exactly 0.0 and 1.0
+    score = max(rewards) if rewards else 0.001
+    score = min(max(score, 0.001), 0.999)
     success = score >= 0.5
 
     log_end(success=success, steps=steps_taken, score=score, rewards=rewards)

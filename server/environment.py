@@ -190,6 +190,9 @@ class APIDebugEnvironment(Environment):
         step_multiplier = max(1.0 - 0.1 * (self.current_step - 1), 0.3)
         reward = round(raw_score * step_multiplier, 4)
 
+        # Clamp to open interval (0, 1) - evaluator rejects exactly 0.0 and 1.0
+        reward = max(0.001, min(0.999, reward))
+
         # Track best reward across all steps
         self.best_reward = max(self.best_reward, reward)
 
