@@ -23,7 +23,8 @@ The training auto-promotes through difficulty levels:
 | 2 | classify | 0.6 avg reward | 4 | Identify ALL error types + fields |
 | 3 | medium | 0.6 avg reward | 5 | Fix the broken request body |
 | 4 | headers | 0.5 avg reward | 4 | Fix header-level errors |
-| 5 | hard | -- | 7 | Fix mixed errors + explain reasoning |
+| 5 | response | 0.5 avg reward | 4 | Validate API response issues |
+| 6 | hard | -- | 7 | Fix mixed errors + explain reasoning |
 
 Promotion happens when the rolling average reward (window=10) exceeds
 the threshold for the current level.

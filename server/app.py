@@ -58,12 +58,26 @@ def list_tasks():
                 "description": "Fix request headers (auth, content-type, tokens)",
             },
             {
+                "name": "response",
+                "max_steps": 4,
+                "error_count": "1-2",
+                "grading": "deterministic",
+                "description": "Validate API response: identify wrong status codes, missing fields, type errors, data leaks",
+            },
+            {
                 "name": "hard",
                 "max_steps": 7,
                 "error_count": "2-3",
                 "grading": "70% deterministic + 30% LLM-as-judge",
                 "description": "Fix the request and explain the fix for developers",
             },
+        ],
+        "response_issue_types": [
+            "wrong_status_code",
+            "missing_response_field",
+            "wrong_response_type",
+            "extra_response_field",
+            "inconsistent_error_format",
         ],
         "error_types": [
             "missing_required_field",
@@ -78,8 +92,11 @@ def list_tasks():
             "datetime_format_error",
             "wrong_content_type",
             "expired_auth_token",
+            "wrong_status_code",
+            "redirect_loop",
+            "rate_limit_headers",
         ],
-        "api_spec_count": 30,
+        "api_spec_count": 45,
     })
 
 

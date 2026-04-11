@@ -38,6 +38,10 @@ class APIDebugEnv(EnvClient[APIDebugAction, APIDebugObservation, State]):
             payload["fixed_headers"] = action.fixed_headers
         if action.explanation is not None:
             payload["explanation"] = action.explanation
+        if action.response_issues is not None:
+            payload["response_issues"] = action.response_issues
+        if action.expected_status_code is not None:
+            payload["expected_status_code"] = action.expected_status_code
         return payload
 
     def _parse_result(self, payload: Dict[str, Any]) -> StepResult[APIDebugObservation]:
@@ -62,6 +66,8 @@ class APIDebugEnv(EnvClient[APIDebugAction, APIDebugObservation, State]):
             error_count=obs_data.get("error_count", 1),
             step_number=obs_data.get("step_number", 0),
             max_steps=obs_data.get("max_steps", 3),
+            response_body=obs_data.get("response_body", ""),
+            response_status_code=obs_data.get("response_status_code", 0),
             feedback=obs_data.get("feedback", ""),
             message=obs_data.get("message", ""),
             done=payload.get("done", False),

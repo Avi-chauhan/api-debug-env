@@ -428,6 +428,90 @@ class TestHeadersGrader:
 
 
 # ---------------------------------------------------------------------------
+# TestResponseGrader
+# ---------------------------------------------------------------------------
+
+class TestResponseGrader:
+    """Tests for the response validation task."""
+
+    def test_correct_issues_scores_high(self):
+        env = make_env("response", seed=42)
+        gt_issues = [gt["issue_type"] for gt in env.ground_truths]
+        gt_fields = [gt.get("affected_field", "") for gt in env.ground_truths if gt.get("affected_field")]
+        # Find correct status if applicable
+        expected_status = None
+        for gt in env.ground_truths:
+            if gt["issue_type"] == "wrong_status_code":
+                expected_status = int(gt.get("correct_value", 0))
+        obs = env.step(APIDebugAction(
+            response_issues=gt_issues,
+            affected_fields=gt_fields,
+            expected_status_code=expected_status,
+        ))
+        assert obs.reward >= 0.7
+
+    def test_partial_issues_scores_partial(self):
+        env = make_env("response", seed=10)
+        # Only provide one issue type even if there are more
+        gt = env.ground_truths[0]
+        obs = env.step(APIDebugAction(
+            response_issues=[gt["issue_type"]],
+        ))
+        assert 0.001 <= obs.reward <= 0.999
+
+    def test_empty_action_scores_near_0(self):
+        env = make_env("response", seed=42)
+        obs = env.step(APIDebugAction())
+        assert obs.reward <= 0.01
+
+    def test_max_steps_is_4(self):
+        env = make_env("response", seed=42)
+        assert env.max_steps == 4
+
+    def test_observation_has_response_body(self):
+        env = APIDebugEnvironment()
+        obs = env.reset(task="response", seed=42)
+        assert obs.response_body != ""
+        assert obs.response_status_code > 0
+
+    def test_observation_has_correct_task(self):
+        env = APIDebugEnvironment()
+        obs = env.reset(task="response", seed=42)
+        assert obs.task == "response"
+
+    def test_ground_truth_has_issue_type(self):
+        env = make_env("response", seed=42)
+        valid_types = {
+            "wrong_status_code", "missing_response_field",
+            "wrong_response_type", "extra_response_field",
+            "inconsistent_error_format",
+        }
+        for gt in env.ground_truths:
+            assert gt["issue_type"] in valid_types
+
+    def test_wrong_issues_score_low(self):
+        env = make_env("response", seed=42)
+        obs = env.step(APIDebugAction(
+            response_issues=["nonexistent_issue"],
+        ))
+        assert obs.reward < 0.3
+
+    def test_reward_in_valid_range(self):
+        env = make_env("response", seed=42)
+        obs = env.step(APIDebugAction(
+            response_issues=["wrong_status_code"],
+            expected_status_code=200,
+        ))
+        assert 0.001 <= obs.reward <= 0.999
+
+    def test_response_body_is_valid_json(self):
+        env = APIDebugEnvironment()
+        obs = env.reset(task="response", seed=42)
+        parsed = json.loads(obs.response_body)
+        assert isinstance(parsed, dict)
+
+
+# ---------------------------------------------------------------------------
 # TestHardGrader
 # ---------------------------------------------------------------------------
 

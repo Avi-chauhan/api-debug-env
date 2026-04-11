@@ -51,7 +51,8 @@ CURRICULUM = {
     "easy":     {"next": "classify", "threshold": 0.7, "max_turns": 3},
     "classify": {"next": "medium",   "threshold": 0.6, "max_turns": 4},
     "medium":   {"next": "headers",  "threshold": 0.6, "max_turns": 5},
-    "headers":  {"next": "hard",     "threshold": 0.5, "max_turns": 4},
+    "headers":  {"next": "response", "threshold": 0.5, "max_turns": 4},
+    "response": {"next": "hard",     "threshold": 0.5, "max_turns": 4},
     "hard":     {"next": None,       "threshold": None, "max_turns": 7},
 }
 current_task = "easy"
@@ -89,6 +90,14 @@ Respond with ONLY a JSON object:
 
 Common header error types: wrong_content_type, expired_auth_token, missing_auth_header"""
 
+RESPONSE_PROMPT = """You are an API response validation expert. You receive an API request, its spec, and the server response.
+Identify issues in the response: wrong status codes, missing fields, wrong types, extra fields, inconsistent error format.
+
+Respond with ONLY a JSON object:
+{"response_issues": ["issue_type1"], "affected_fields": ["field1"], "expected_status_code": 200}
+
+Valid issue types: wrong_status_code, missing_response_field, wrong_response_type, extra_response_field, inconsistent_error_format"""
+
 HARD_PROMPT = """You are an API debugging expert. This request has MULTIPLE errors across headers and body.
 Some errors are chained -- fixing one may reveal others. Fix everything and explain your reasoning.
 
@@ -100,6 +109,7 @@ TASK_PROMPTS = {
     "classify": CLASSIFY_PROMPT,
     "medium": MEDIUM_PROMPT,
     "headers": HEADERS_PROMPT,
+    "response": RESPONSE_PROMPT,
     "hard": HARD_PROMPT,
 }
 
@@ -141,6 +151,8 @@ def build_action(data: dict) -> APIDebugAction:
         affected_fields=data.get("affected_fields"),
         fixed_request=fixed_req,
         fixed_headers=data.get("fixed_headers"),
+        response_issues=data.get("response_issues"),
+        expected_status_code=data.get("expected_status_code"),
     )
 
 

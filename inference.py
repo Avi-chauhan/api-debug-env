@@ -34,9 +34,9 @@ ENV_URL = os.getenv("ENV_URL") or "https://avichauhan-api-debug-env.hf.space"
 IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 # Task configuration
-TASKS = ["easy", "classify", "medium", "headers", "hard"]
+TASKS = ["easy", "classify", "medium", "headers", "response", "hard"]
 EPISODES_PER_TASK = 3
-MAX_STEPS = {"easy": 3, "classify": 4, "medium": 5, "headers": 4, "hard": 7}
+MAX_STEPS = {"easy": 3, "classify": 4, "medium": 5, "headers": 4, "response": 4, "hard": 7}
 BENCHMARK_NAME = "api_debug"
 
 
@@ -127,6 +127,20 @@ SYSTEM_PROMPTS = {
         Common headers: Authorization (Bearer token), Content-Type (application/json)
     """).strip(),
 
+    "response": textwrap.dedent("""
+        You are an API response validation expert. You receive an API request, its specification,
+        and the server's response. Your job: identify issues in the response.
+
+        Respond with ONLY a JSON object in this format:
+        {"response_issues": ["issue_type1", "issue_type2"], "affected_fields": ["field1"], "expected_status_code": 200}
+
+        Valid response issue types:
+        wrong_status_code, missing_response_field, wrong_response_type,
+        extra_response_field, inconsistent_error_format
+
+        Only include expected_status_code if you detect a wrong_status_code issue.
+    """).strip(),
+
     "hard": textwrap.dedent("""
         You are an API debugging expert. You receive a broken API request with multiple errors.
         Your job: diagnose the errors, fix the request, and explain the fix for a developer.
@@ -153,10 +167,14 @@ def build_user_prompt(obs, step_num: int) -> str:
         f"API: {obs.http_method} {obs.endpoint} ({obs.api_name})",
         f"Error count: {obs.error_count}",
         f"Step {step_num}/{obs.max_steps}",
-        f"\nBroken request body:\n{obs.broken_request}",
+        f"\nRequest body:\n{obs.broken_request}",
         f"\nRequest headers: {json.dumps(obs.broken_headers)}",
         f"\nAPI Specification:\n{obs.api_spec}",
     ]
+    # Include response data for response validation task
+    if obs.response_body:
+        parts.append(f"\nResponse status code: {obs.response_status_code}")
+        parts.append(f"\nResponse body:\n{obs.response_body}")
     if obs.feedback:
         parts.append(f"\nFeedback from previous attempt:\n{obs.feedback}")
     return "\n".join(parts)
@@ -214,6 +232,8 @@ def build_action(data: dict) -> APIDebugAction:
         fixed_request=fixed_req,
         fixed_headers=data.get("fixed_headers"),
         explanation=data.get("explanation"),
+        response_issues=data.get("response_issues"),
+        expected_status_code=data.get("expected_status_code"),
     )
 
 
@@ -301,6 +321,9 @@ def _action_summary(action: APIDebugAction, task: str) -> str:
     elif task == "headers":
         hdr_count = len(action.fixed_headers or {})
         return f"headers:{action.error_type or 'none'}+fix:{hdr_count}"
+    elif task == "response":
+        issues = action.response_issues or []
+        return f"response:{','.join(issues) or 'none'}+status:{action.expected_status_code or 'none'}"
     else:
         fix_len = len(action.fixed_request or "")
         exp_len = len(action.explanation or "")

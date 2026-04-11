@@ -42,6 +42,14 @@ class APIDebugAction(Action):
         default=None,
         description="Developer-facing explanation of the fix (hard task only)"
     )
+    response_issues: Optional[List[str]] = Field(
+        default=None,
+        description="Issues found in the API response (response task only)"
+    )
+    expected_status_code: Optional[int] = Field(
+        default=None,
+        description="Correct HTTP status code for the response (response task only)"
+    )
 
 
 class APIDebugObservation(Observation):
@@ -52,7 +60,7 @@ class APIDebugObservation(Observation):
 
     task: str = Field(
         default="easy",
-        description="Current task difficulty: easy, medium, hard"
+        description="Current task: easy, classify, medium, headers, hard, response"
     )
     api_name: str = Field(
         default="",
@@ -89,6 +97,14 @@ class APIDebugObservation(Observation):
     max_steps: int = Field(
         default=3,
         description="Maximum steps allowed for this task"
+    )
+    response_body: str = Field(
+        default="",
+        description="JSON string of the API response to validate (response task only)"
+    )
+    response_status_code: int = Field(
+        default=0,
+        description="HTTP status code of the response (response task only)"
     )
     feedback: str = Field(
         default="",

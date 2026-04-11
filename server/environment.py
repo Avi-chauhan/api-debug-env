@@ -32,6 +32,7 @@ from .error_injectors import (
     inject_error,
     inject_multiple_errors,
 )
+from .response_specs import get_random_response_template, inject_response_issues
 from .validators import (
     validate_field_type,
     validate_headers_against_spec,
@@ -46,6 +47,7 @@ TASK_CONFIG = {
     "medium": {"max_steps": 5, "error_count": 1},
     "headers": {"max_steps": 4, "error_count": 1},
     "hard": {"max_steps": 7, "min_errors": 2, "max_errors": 3},
+    "response": {"max_steps": 4, "min_issues": 1, "max_issues": 2},
 }
 
 
@@ -69,7 +71,8 @@ class APIDebugEnvironment(Environment):
         "easy":     {"next": "classify", "threshold": 0.7},
         "classify": {"next": "medium",   "threshold": 0.6},
         "medium":   {"next": "headers",  "threshold": 0.6},
-        "headers":  {"next": "hard",     "threshold": 0.5},
+        "headers":  {"next": "response", "threshold": 0.5},
+        "response": {"next": "hard",     "threshold": 0.5},
         "hard":     {"next": None,       "threshold": None},
     }
     AUTO_WINDOW = 10
@@ -89,6 +92,10 @@ class APIDebugEnvironment(Environment):
         self.rng = random.Random()
         # For wrong_http_method error: the method shown to the agent
         self.shown_http_method = ""
+        # Response task state
+        self.response_body: Dict[str, Any] = {}
+        self.response_status_code: int = 0
+        self.response_template: Dict[str, Any] = {}
         # Curriculum state for task="auto"
         self._auto_task = "easy"
         self._auto_rewards: List[float] = []
@@ -134,6 +141,41 @@ class APIDebugEnvironment(Environment):
         self.spec = copy.deepcopy(get_random_spec(self.rng))
         valid_request = copy.deepcopy(self.spec["valid_example"])
         valid_headers = copy.deepcopy(self.spec["required_headers"])
+
+        # Response task has a completely different setup: broken response, not request
+        if self.task == "response":
+            issue_count = self.rng.randint(config["min_issues"], config["max_issues"])
+            self.response_template = get_random_response_template(self.rng)
+            self.response_body, self.response_status_code, self.ground_truths = (
+                inject_response_issues(self.response_template, self.rng, issue_count)
+            )
+            # For response task, the request is correct -- agent examines the response
+            self.broken_request = valid_request
+            self.broken_headers = valid_headers
+            self.shown_http_method = self.spec["http_method"]
+            error_count = len(self.ground_truths)
+            return APIDebugObservation(
+                task=self.task,
+                api_name=self.spec["api_name"],
+                http_method=self.shown_http_method,
+                endpoint=self.spec["endpoint"],
+                broken_request=json.dumps(self.broken_request, indent=2),
+                broken_headers=self.broken_headers,
+                api_spec=self._build_spec_string(),
+                response_body=json.dumps(self.response_body, indent=2),
+                response_status_code=self.response_status_code,
+                error_count=error_count,
+                step_number=0,
+                max_steps=self.max_steps,
+                feedback="",
+                message=(
+                    f"Validate the response from {self.shown_http_method} {self.spec['endpoint']}. "
+                    f"The response has {error_count} issue(s). "
+                    f"You have {self.max_steps} steps."
+                ),
+                done=False,
+                reward=0.0,
+            )
 
         # Inject errors based on difficulty
         if self.task == "hard":
@@ -230,6 +272,8 @@ class APIDebugEnvironment(Environment):
             raw_score, feedback = self._grade_medium(action)
         elif self.task == "headers":
             raw_score, feedback = self._grade_headers(action)
+        elif self.task == "response":
+            raw_score, feedback = self._grade_response(action)
         else:
             raw_score, feedback = self._grade_hard(action)
 
@@ -453,6 +497,65 @@ class APIDebugEnvironment(Environment):
 
         return round(score, 4), "; ".join(parts)
 
+    def _grade_response(self, action: APIDebugAction) -> Tuple[float, str]:
+        """Grade response validation. Fully deterministic.
+
+        Agent must identify issue types and, for wrong_status_code, provide
+        the correct status code.
+
+        Scoring: 0.5 for issue type identification (Jaccard) +
+                 0.3 for affected field identification (Jaccard) +
+                 0.2 for correct status code (if applicable).
+        """
+        score = 0.0
+        parts = []
+
+        gt_issue_types = {gt["issue_type"] for gt in self.ground_truths}
+        gt_fields = {gt.get("affected_field", "") for gt in self.ground_truths} - {""}
+
+        # Issue type identification (0.5 weight)
+        predicted_issues = set(action.response_issues or [])
+        if predicted_issues and gt_issue_types:
+            intersection = predicted_issues & gt_issue_types
+            union = predicted_issues | gt_issue_types
+            jaccard = len(intersection) / len(union) if union else 0.0
+            score += 0.5 * jaccard
+            parts.append(f"Issue types: {len(intersection)}/{len(gt_issue_types)} correct (Jaccard={jaccard:.2f})")
+        else:
+            parts.append("Issue types: NOT PROVIDED" if not predicted_issues else "Issue types: NONE CORRECT")
+
+        # Affected field identification via error_type or affected_fields (0.3 weight)
+        predicted_fields = set(action.affected_fields or [])
+        if predicted_fields and gt_fields:
+            intersection = predicted_fields & gt_fields
+            union = predicted_fields | gt_fields
+            jaccard = len(intersection) / len(union) if union else 0.0
+            score += 0.3 * jaccard
+            parts.append(f"Affected fields: {len(intersection)}/{len(gt_fields)} correct")
+        else:
+            parts.append("Affected fields: NOT PROVIDED" if not predicted_fields else "Affected fields: NONE CORRECT")
+
+        # Status code check (0.2 weight) -- only if wrong_status_code is a ground truth
+        has_status_issue = any(gt["issue_type"] == "wrong_status_code" for gt in self.ground_truths)
+        if has_status_issue:
+            correct_status = None
+            for gt in self.ground_truths:
+                if gt["issue_type"] == "wrong_status_code":
+                    correct_status = int(gt.get("correct_value", 0))
+                    break
+            if action.expected_status_code and action.expected_status_code == correct_status:
+                score += 0.2
+                parts.append(f"Status code: CORRECT ({correct_status})")
+            else:
+                given = action.expected_status_code or "(none)"
+                parts.append(f"Status code: INCORRECT (you said {given}, expected {correct_status})")
+        else:
+            # No status code issue -- redistribute 0.2 to issue types
+            score += 0.2 * (len(predicted_issues & gt_issue_types) / len(gt_issue_types) if gt_issue_types else 0.0)
+            parts.append("Status code: N/A (no status code issue)")
+
+        return round(score, 4), "; ".join(parts)
+
     def _grade_hard(self, action: APIDebugAction) -> Tuple[float, str]:
         """Grade fix + explanation. 70% deterministic fix, 30% explanation.
 
@@ -602,7 +705,7 @@ class APIDebugEnvironment(Environment):
             remaining = self.max_steps - self.current_step
             msg = f"{remaining} step(s) remaining. Use the feedback to improve."
 
-        return APIDebugObservation(
+        obs = APIDebugObservation(
             task=self.task,
             api_name=self.spec.get("api_name", ""),
             http_method=self.shown_http_method,
@@ -618,3 +721,8 @@ class APIDebugEnvironment(Environment):
             done=done,
             reward=reward,
         )
+        # Include response data for response task
+        if self.task == "response":
+            obs.response_body = json.dumps(self.response_body, indent=2)
+            obs.response_status_code = self.response_status_code
+        return obs
