@@ -22,6 +22,10 @@ class APIDebugAction(Action):
         default=None,
         description="Diagnosed error type, e.g. 'missing_required_field'"
     )
+    error_types: Optional[List[str]] = Field(
+        default=None,
+        description="All diagnosed error types (for classify task with multiple errors)"
+    )
     affected_fields: Optional[List[str]] = Field(
         default=None,
         description="List of field names affected by the error"

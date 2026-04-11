@@ -37,6 +37,13 @@ def list_tasks():
                 "description": "Identify the error type and affected fields",
             },
             {
+                "name": "classify",
+                "max_steps": 4,
+                "error_count": "2-3",
+                "grading": "deterministic",
+                "description": "Identify ALL error types and affected fields across multiple errors",
+            },
+            {
                 "name": "medium",
                 "max_steps": 5,
                 "error_count": 1,

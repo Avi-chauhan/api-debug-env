@@ -183,6 +183,88 @@ class TestEasyGrader:
 
 
 # ---------------------------------------------------------------------------
+# TestClassifyGrader
+# ---------------------------------------------------------------------------
+
+class TestClassifyGrader:
+    """Tests for the classify task: multi-error classification."""
+
+    def test_all_types_all_fields_scores_high(self):
+        env = make_env("classify", seed=42)
+        gt_types = [gt["error_type"] for gt in env.ground_truths]
+        gt_fields = []
+        for gt in env.ground_truths:
+            gt_fields.extend(gt.get("affected_fields", []))
+        obs = env.step(APIDebugAction(
+            error_types=gt_types,
+            affected_fields=gt_fields,
+        ))
+        assert obs.reward >= 0.9
+
+    def test_partial_types_gives_partial_score(self):
+        env = make_env("classify", seed=42)
+        first_type = env.ground_truths[0]["error_type"]
+        obs = env.step(APIDebugAction(error_types=[first_type]))
+        # Got 1 of 2-3 types correct, no fields -> partial score
+        assert 0.1 < obs.reward < 0.7
+
+    def test_empty_action_scores_near_0(self):
+        env = make_env("classify", seed=42)
+        obs = env.step(APIDebugAction())
+        assert obs.reward <= 0.01
+
+    def test_single_error_type_field_accepted(self):
+        """Accepts error_type (singular) as fallback for classify."""
+        env = make_env("classify", seed=42)
+        first_type = env.ground_truths[0]["error_type"]
+        first_fields = env.ground_truths[0].get("affected_fields", [])
+        obs = env.step(APIDebugAction(
+            error_type=first_type,
+            affected_fields=first_fields,
+        ))
+        assert obs.reward > 0.1
+
+    def test_wrong_types_score_low(self):
+        env = make_env("classify", seed=42)
+        obs = env.step(APIDebugAction(
+            error_types=["nonexistent_error"],
+            affected_fields=["fake_field"],
+        ))
+        assert obs.reward <= 0.01
+
+    def test_extra_types_reduces_jaccard(self):
+        env = make_env("classify", seed=42)
+        gt_types = [gt["error_type"] for gt in env.ground_truths]
+        obs = env.step(APIDebugAction(
+            error_types=gt_types + ["extra_fake_error"],
+        ))
+        # Extra type reduces Jaccard, but correct ones still score
+        assert obs.reward > 0.1
+
+    def test_max_steps_is_4(self):
+        env = make_env("classify", seed=42)
+        assert env.max_steps == 4
+
+    def test_multiple_ground_truths(self):
+        env = make_env("classify", seed=42)
+        assert len(env.ground_truths) >= 2
+
+    def test_feedback_contains_type_info(self):
+        env = make_env("classify", seed=42)
+        gt_types = [gt["error_type"] for gt in env.ground_truths]
+        obs = env.step(APIDebugAction(error_types=gt_types))
+        assert "error_types" in obs.feedback
+
+    def test_reward_in_valid_range(self):
+        env = make_env("classify", seed=42)
+        obs = env.step(APIDebugAction(
+            error_types=["missing_required_field"],
+            affected_fields=["email"],
+        ))
+        assert 0.001 <= obs.reward <= 0.999
+
+
+# ---------------------------------------------------------------------------
 # TestMediumGrader
 # ---------------------------------------------------------------------------
 

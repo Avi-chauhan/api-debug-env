@@ -39,6 +39,7 @@ from .validators import (
 # Task configuration: max steps and error count per difficulty
 TASK_CONFIG = {
     "easy": {"max_steps": 3, "error_count": 1},
+    "classify": {"max_steps": 4, "min_errors": 2, "max_errors": 3},
     "medium": {"max_steps": 5, "error_count": 1},
     "hard": {"max_steps": 7, "min_errors": 2, "max_errors": 3},
 }
@@ -114,7 +115,7 @@ class APIDebugEnvironment(Environment):
         valid_headers = copy.deepcopy(self.spec["required_headers"])
 
         # Inject errors based on difficulty
-        if self.task == "hard":
+        if self.task in ("hard", "classify"):
             error_count = self.rng.randint(config["min_errors"], config["max_errors"])
             self.broken_request, self.broken_headers, self.ground_truths = (
                 inject_multiple_errors(
@@ -181,6 +182,8 @@ class APIDebugEnvironment(Environment):
         # Grade based on task type
         if self.task == "easy":
             raw_score, feedback = self._grade_easy(action)
+        elif self.task == "classify":
+            raw_score, feedback = self._grade_classify(action)
         elif self.task == "medium":
             raw_score, feedback = self._grade_medium(action)
         else:
@@ -244,6 +247,61 @@ class APIDebugEnvironment(Environment):
             parts.append(f"error_type: INCORRECT (you said '{given}')")
 
         # Check affected fields using Jaccard similarity (0.4 weight)
+        agent_fields = set(action.affected_fields or [])
+        if gt_fields and agent_fields:
+            intersection = gt_fields & agent_fields
+            union = gt_fields | agent_fields
+            jaccard = len(intersection) / len(union) if union else 0.0
+            score += 0.4 * jaccard
+            parts.append(
+                f"affected_fields: {len(intersection)}/{len(gt_fields)} correct, "
+                f"{len(agent_fields - gt_fields)} extra"
+            )
+        elif not agent_fields:
+            parts.append("affected_fields: MISSING (none provided)")
+        else:
+            parts.append("affected_fields: INCORRECT (0 matches)")
+
+        return round(score, 4), "; ".join(parts)
+
+    def _grade_classify(self, action: APIDebugAction) -> Tuple[float, str]:
+        """Grade multi-error classification. Fully deterministic.
+
+        Like easy but the agent must identify ALL error types and ALL
+        affected fields across multiple injected errors.
+
+        Scoring: 0.6 for error types (Jaccard) + 0.4 for affected fields (Jaccard).
+        Accepts either error_types (list) or error_type (single) from the agent.
+        """
+        score = 0.0
+        parts = []
+
+        gt_types = {gt["error_type"] for gt in self.ground_truths}
+        gt_fields: set = set()
+        for gt in self.ground_truths:
+            gt_fields.update(gt.get("affected_fields", []))
+
+        # Accept error_types (list) or fall back to error_type (single)
+        agent_types = set(action.error_types or [])
+        if not agent_types and action.error_type:
+            agent_types = {action.error_type}
+
+        # Error types Jaccard (0.6 weight)
+        if gt_types and agent_types:
+            intersection = gt_types & agent_types
+            union = gt_types | agent_types
+            jaccard = len(intersection) / len(union) if union else 0.0
+            score += 0.6 * jaccard
+            parts.append(
+                f"error_types: {len(intersection)}/{len(gt_types)} correct, "
+                f"{len(agent_types - gt_types)} extra"
+            )
+        elif not agent_types:
+            parts.append("error_types: MISSING (none provided)")
+        else:
+            parts.append("error_types: INCORRECT (0 matches)")
+
+        # Affected fields Jaccard (0.4 weight)
         agent_fields = set(action.affected_fields or [])
         if gt_fields and agent_fields:
             intersection = gt_fields & agent_fields

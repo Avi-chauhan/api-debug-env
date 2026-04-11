@@ -28,6 +28,8 @@ class APIDebugEnv(EnvClient[APIDebugAction, APIDebugObservation, State]):
         payload = {}
         if action.error_type is not None:
             payload["error_type"] = action.error_type
+        if action.error_types is not None:
+            payload["error_types"] = action.error_types
         if action.affected_fields is not None:
             payload["affected_fields"] = action.affected_fields
         if action.fixed_request is not None:
