@@ -259,7 +259,7 @@ class APIDebugEnvironment(Environment):
         if self.episode_done:
             return self._make_observation(
                 feedback="Episode already ended.",
-                reward=0.0,
+                reward=self.best_reward if self.best_reward > 0 else 0.001,
                 done=True,
             )
 

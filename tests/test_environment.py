@@ -159,11 +159,11 @@ class TestEasyGrader:
         assert obs is not None
         assert obs.done is True
 
-    def test_step_after_done_returns_zero_reward(self):
+    def test_step_after_done_returns_best_reward(self):
         env = make_env("easy", seed=42)
         env.step(perfect_easy_action(env))  # ends episode
         obs = env.step(APIDebugAction(error_type="anything"))
-        assert obs.reward == 0.0
+        assert obs.reward >= 0.001  # never 0.0 -- open interval (0, 1)
         assert obs.done is True
 
     def test_reward_always_non_negative(self):
