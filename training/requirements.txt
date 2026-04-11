@@ -1,4 +1,4 @@
-trl>=0.26.0
+trl[vllm]>=0.26.0
 transformers
 torch
 datasets
