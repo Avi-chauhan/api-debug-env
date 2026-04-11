@@ -495,6 +495,13 @@ All five advancement items from the original roadmap have been implemented:
 **How it works**: The model generates JSON debugging attempts, the environment grades them via its deterministic graders, and GRPO updates the policy to prefer higher-scoring responses. The rollout function connects to the live HF Space via WebSocket, runs multi-turn episodes, and returns prompt_ids, completion_ids, logprobs, and env_reward.
 **Key config**: `max_completion_length=128`, `gradient_accumulation_steps=16`, `vllm_gpu_memory_utilization=0.3`. Runs on free Colab T4 GPU.
 
+**Training results** (64 episodes, easy task, Colab T4):
+- Runtime: 7m 43s (8 training steps)
+- Mean reward: 0.172 (easy task, rolling across all steps)
+- Mean completion length: 62 tokens
+- Loss converged from 0.0 to -0.003 with gradient norms showing active learning
+- Trained model: [avichauhan/api-debug-grpo-qwen-0.5b](https://huggingface.co/avichauhan/api-debug-grpo-qwen-0.5b)
+
 ### 2. Expanded API Specs and Domains (IMPLEMENTED)
 **What**: Expanded from 30 specs / 6 domains to 45 specs / 9 domains.
 **New domains**: Analytics/Monitoring (dashboards, metrics, alerts), DevOps/Infrastructure (deployments, DNS, load balancers), AI/ML APIs (inference, fine-tuning, embeddings).

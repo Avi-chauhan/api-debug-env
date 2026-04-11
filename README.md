@@ -206,6 +206,22 @@ The training auto-promotes through 6 difficulty levels based on rolling average 
 
 The environment also supports `task="auto"` which lets the environment itself manage curriculum progression based on session history.
 
+### Training Results
+
+Trained on Google Colab (free T4 GPU) with 64 episodes on the easy task:
+
+| Metric | Value |
+|--------|-------|
+| Runtime | 7m 43s (8 steps) |
+| Mean reward (easy) | 0.172 |
+| Mean completion length | 62 tokens |
+| Loss | -0.003 (converging) |
+| GPU | Tesla T4, bf16 |
+
+The trained model is available at: [avichauhan/api-debug-grpo-qwen-0.5b](https://huggingface.co/avichauhan/api-debug-grpo-qwen-0.5b)
+
+A Colab notebook is provided at `training/train_colab.ipynb` for one-click training.
+
 ## Setup
 
 ### Prerequisites
