@@ -281,7 +281,6 @@ grpo_args = GRPOConfig(
     report_to="none",
     bf16=supports_bf16,
     fp16=has_gpu and not supports_bf16,
-    no_cuda=not has_gpu,
     gradient_checkpointing=True,
     vllm_gpu_memory_utilization=0.3,
     dataloader_pin_memory=False,
