@@ -2,10 +2,11 @@
 Core environment for the API Debug Environment.
 
 Implements the OpenEnv Environment interface with:
-- 3 task difficulty levels (easy, medium, hard)
+- 5 task difficulty levels (easy, classify, medium, headers, hard)
 - Multi-turn episodes with structured feedback
-- Deterministic grading for easy/medium, LLM-as-judge for hard
+- Deterministic grading for easy/classify/medium/headers, LLM-as-judge for hard
 - Step reward decay to encourage efficient debugging
+- Auto-curriculum (task="auto") that promotes based on rolling reward
 """
 
 import copy
@@ -62,6 +63,17 @@ class APIDebugEnvironment(Environment):
 
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
 
+    # Curriculum thresholds for task="auto" mode
+    # When rolling avg reward exceeds threshold, promote to next task
+    AUTO_CURRICULUM = {
+        "easy":     {"next": "classify", "threshold": 0.7},
+        "classify": {"next": "medium",   "threshold": 0.6},
+        "medium":   {"next": "headers",  "threshold": 0.6},
+        "headers":  {"next": "hard",     "threshold": 0.5},
+        "hard":     {"next": None,       "threshold": None},
+    }
+    AUTO_WINDOW = 10
+
     def __init__(self):
         super().__init__()
         self._state = State(episode_id=str(uuid4()), step_count=0)
@@ -77,6 +89,9 @@ class APIDebugEnvironment(Environment):
         self.rng = random.Random()
         # For wrong_http_method error: the method shown to the agent
         self.shown_http_method = ""
+        # Curriculum state for task="auto"
+        self._auto_task = "easy"
+        self._auto_rewards: List[float] = []
 
     def reset(
         self,
@@ -90,7 +105,7 @@ class APIDebugEnvironment(Environment):
         Args:
             seed: Random seed for reproducible episodes.
             episode_id: Custom episode identifier.
-            task: Difficulty level (easy, medium, hard).
+            task: Difficulty level (easy, classify, medium, headers, hard, auto).
         """
         # Initialize RNG
         if seed is not None:
@@ -98,8 +113,11 @@ class APIDebugEnvironment(Environment):
         else:
             self.rng = random.Random()
 
-        # Validate task
-        self.task = task if task in TASK_CONFIG else "easy"
+        # Validate task -- "auto" uses curriculum to pick difficulty
+        if task == "auto":
+            self.task = self._auto_task
+        else:
+            self.task = task if task in TASK_CONFIG else "easy"
         config = TASK_CONFIG[self.task]
         self.max_steps = config["max_steps"]
         self.current_step = 0
@@ -234,6 +252,9 @@ class APIDebugEnvironment(Environment):
             self.episode_done = True
             # Return best reward achieved during the episode
             reward = self.best_reward
+            # Track for auto-curriculum promotion
+            self._auto_rewards.append(reward)
+            self._maybe_auto_promote()
 
         return self._make_observation(
             feedback=feedback,
@@ -244,6 +265,18 @@ class APIDebugEnvironment(Environment):
     @property
     def state(self) -> State:
         return self._state
+
+    def _maybe_auto_promote(self):
+        """Check if auto-curriculum should promote to next difficulty."""
+        config = self.AUTO_CURRICULUM.get(self._auto_task)
+        if not config or config["next"] is None or config["threshold"] is None:
+            return
+        if len(self._auto_rewards) < self.AUTO_WINDOW:
+            return
+        avg = sum(self._auto_rewards[-self.AUTO_WINDOW:]) / self.AUTO_WINDOW
+        if avg >= config["threshold"]:
+            self._auto_task = config["next"]
+            self._auto_rewards.clear()
 
     # =====================================================================
     # Grading methods
