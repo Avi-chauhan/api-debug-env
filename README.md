@@ -20,7 +20,7 @@ Built for the Meta PyTorch OpenEnv Hackathon x Scaler School of Technology 2026.
 
 ## Infinite Unique Scenarios
 
-Unlike fixed-fixture environments where every episode presents the same scenario, this environment generates a unique broken request each episode. With 30 API spec templates across 6 domains and 10 error injection functions, the environment produces thousands of distinct training scenarios. An agent cannot memorize answers after one run - it must learn a generalizable debugging strategy. This is critical for real RL training value: agents learn transferable skills rather than dataset-specific shortcuts.
+Unlike fixed-fixture environments where every episode presents the same scenario, this environment generates a unique broken request each episode. With 45 API spec templates across 9 domains and 15 error injection functions (including chained multi-step errors), the environment produces tens of thousands of distinct training scenarios. An agent cannot memorize answers after one run - it must learn a generalizable debugging strategy. This is critical for real RL training value: agents learn transferable skills rather than dataset-specific shortcuts.
 
 ## Why This Domain
 
@@ -28,7 +28,7 @@ Developers spend significant time debugging API contract mismatches. Research fr
 
 ## How It Works
 
-1. On `reset()`, the environment picks a random API spec from 30 templates and injects 1-3 errors
+1. On `reset()`, the environment picks a random API spec from 45 templates and injects 1-3 errors
 2. The agent receives the broken request, headers, and the API specification
 3. The agent submits a fix attempt via `step()`
 4. The environment grades the attempt and returns structured feedback
@@ -41,7 +41,10 @@ Each episode allows multiple attempts. Perfect answers on early steps earn full 
 | Task | Difficulty | Max Steps | Errors | Grading |
 |------|-----------|-----------|--------|---------|
 | easy | Identify error type and affected fields | 3 | 1 | Deterministic: 0.6 x type_match + 0.4 x fields_match |
+| classify | Identify ALL error types across multiple errors | 4 | 2-3 | Deterministic: 0.6 x Jaccard(types) + 0.4 x Jaccard(fields) |
 | medium | Fix the broken request | 5 | 1 | Deterministic: per-field validation against spec |
+| headers | Fix header-level errors (auth, content-type, tokens) | 4 | 1 | Deterministic: 0.7 x header_fix + 0.3 x type_match |
+| response | Validate API response for issues | 4 | 1-2 | Deterministic: 0.5 x Jaccard(issues) + 0.3 x Jaccard(fields) + 0.2 x status_code |
 | hard | Fix request + explain for developers | 7 | 2-3 | 70% deterministic fix + 30% LLM-as-judge explanation (gpt-4o-mini) |
 
 ## Error Types
@@ -58,8 +61,13 @@ Each episode allows multiple attempts. Perfect answers on early steps earn full 
 | malformed_json_value | Corrupted field value | `{broken` as a value |
 | invalid_enum_value | Value not in allowed list | `currency: "xyz"` |
 | datetime_format_error | Wrong date format | `04/01/2026` instead of ISO 8601 |
+| wrong_content_type | Wrong Content-Type header | `text/plain` instead of `application/json` |
+| expired_auth_token | Expired or invalid auth token | `Bearer expired_token_2024` |
+| wrong_status_code | Wrong HTTP status code in response | `200` instead of `201` for resource creation |
+| redirect_loop | Redirect configuration error | Version upgrade redirect loop |
+| rate_limit_headers | Rate limit exceeded headers | `X-RateLimit-Remaining: 0` |
 
-## API Spec Domains (30 templates)
+## API Spec Domains (45 templates)
 
 | Domain | Count | Examples |
 |--------|-------|---------|
@@ -69,6 +77,9 @@ Each episode allows multiple attempts. Perfect answers on early steps earn full 
 | Messaging (Twilio-like) | 5 | Send SMS, Send Email, Create Webhook |
 | E-Commerce | 5 | Create Order, Process Payment, Create Shipping Label |
 | Calendar and Auth | 5 | Create Event, OAuth Token, Create API Key |
+| Analytics/Monitoring | 5 | Create Dashboard, Add Metric, Create Alert |
+| DevOps/Infrastructure | 5 | Create Deployment, Scale Service, Create DNS Record |
+| AI/ML APIs | 5 | Submit Inference, Create Fine-tune Job, Upload Dataset |
 
 ## Action Space
 
@@ -76,11 +87,14 @@ The agent sends an `APIDebugAction` with these fields (all optional, submit what
 
 | Field | Type | Used In | Description |
 |-------|------|---------|-------------|
-| error_type | string | easy, hard | Diagnosed error type |
-| affected_fields | list[string] | easy, hard | Fields affected by the error |
+| error_type | string | easy, headers, hard | Diagnosed error type |
+| error_types | list[string] | classify | All diagnosed error types (multi-error) |
+| affected_fields | list[string] | easy, classify, response, hard | Fields affected by the error |
 | fixed_request | string (JSON) | medium, hard | Corrected request body |
-| fixed_headers | dict | medium, hard | Corrected HTTP headers |
+| fixed_headers | dict | medium, headers, hard | Corrected HTTP headers |
 | explanation | string | hard | Developer-facing explanation |
+| response_issues | list[string] | response | Issue types found in API response |
+| expected_status_code | int | response | Correct HTTP status code |
 
 ## Observation Space
 
@@ -88,13 +102,15 @@ The environment returns an `APIDebugObservation` with:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| task | string | Current difficulty: easy, medium, hard |
+| task | string | Current task: easy, classify, medium, headers, response, hard |
 | api_name | string | Name of the API (e.g. "Create Customer") |
 | http_method | string | HTTP method of the request |
 | endpoint | string | API endpoint path |
 | broken_request | string (JSON) | The malformed request body |
 | broken_headers | dict | HTTP headers sent with the request |
 | api_spec | string (JSON) | API specification with required fields and types |
+| response_body | string (JSON) | Server response body (response task only) |
+| response_status_code | int | HTTP status code of response (response task only) |
 | error_count | int | Number of errors injected |
 | step_number | int | Current step in the episode |
 | max_steps | int | Maximum steps allowed |
@@ -137,11 +153,47 @@ Scores from running inference.py against the live HF Space (3 episodes per task,
 | Task | Episodes | Qwen2.5-72B-Instruct | gpt-4o-mini |
 |------|----------|----------------------|-------------|
 | easy | 3 | 0.999 | 0.667 |
+| classify | 3 | -- | -- |
 | medium | 3 | 0.999 | 0.999 |
+| headers | 3 | -- | -- |
+| response | 3 | -- | -- |
 | hard | 3 | 0.780 | 0.760 |
-| **overall** | **9** | **0.926** | **0.809** |
 
 Hard task uses LLM-as-judge (gpt-4o-mini) for explanation quality scoring, which is stricter than a heuristic baseline. The agent must fix 2-3 simultaneous errors and provide a developer-facing explanation to score high. Larger models perform better on the hard task, showing meaningful difficulty progression.
+
+## Chained Multi-Step Errors
+
+The hard task supports chained error scenarios where errors depend on each other. Fixing one error reveals the next, simulating real-world API debugging:
+
+| Chain Pattern | Gate Error | Body Errors |
+|---------------|-----------|-------------|
+| auth_gate | missing_auth_header, expired_auth_token | (any body error) |
+| content_type_gate | wrong_content_type | wrong_field_type, malformed_json_value, invalid_enum_value |
+| method_chain | wrong_http_method | missing_required_field, extra_unknown_field, null_value_in_required |
+| rate_limit_chain | rate_limit_headers | expired_auth_token, missing_required_field |
+| redirect_chain | redirect_loop | wrong_field_type, datetime_format_error, invalid_email_format |
+
+## GRPO Training with Curriculum Learning
+
+The `training/` directory contains a GRPO training script that trains a small LLM (Qwen 0.5B) using reward signals from the live environment:
+
+```bash
+pip install -r training/requirements.txt
+python training/train.py
+```
+
+The training auto-promotes through 6 difficulty levels based on rolling average reward:
+
+| Level | Task | Threshold | Max Turns |
+|-------|------|-----------|-----------|
+| 1 | easy | 0.7 | 3 |
+| 2 | classify | 0.6 | 4 |
+| 3 | medium | 0.6 | 5 |
+| 4 | headers | 0.5 | 4 |
+| 5 | response | 0.5 | 4 |
+| 6 | hard | -- | 7 |
+
+The environment also supports `task="auto"` which lets the environment itself manage curriculum progression based on session history.
 
 ## Setup
 
@@ -212,13 +264,19 @@ api-debug-env/
 ├── __init__.py
 ├── tests/
 │   ├── __init__.py
-│   └── test_environment.py  # 79 unit tests
+│   └── test_environment.py  # 109 unit tests
+├── training/
+│   ├── __init__.py
+│   ├── train.py            # GRPO training with 6-level curriculum
+│   ├── requirements.txt
+│   └── README.md
 └── server/
     ├── __init__.py
     ├── app.py              # FastAPI app via create_app()
-    ├── environment.py      # Core logic: reset(), step(), graders + LLM judge
-    ├── api_specs.py        # 30 API spec templates
-    ├── error_injectors.py  # 10 error injection functions
+    ├── environment.py      # Core logic: 6 tasks, graders, LLM judge, auto-curriculum
+    ├── api_specs.py        # 45 API spec templates across 9 domains
+    ├── error_injectors.py  # 15 error types + 5 chain patterns
+    ├── response_specs.py   # 8 response templates + 5 issue injection types
     └── validators.py       # Field type validation helpers
 ```
 

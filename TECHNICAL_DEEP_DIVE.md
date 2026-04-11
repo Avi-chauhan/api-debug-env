@@ -25,13 +25,16 @@ A complete behind-the-scenes breakdown of the environment: what it does, how eve
 
 ## What We Built
 
-An RL (Reinforcement Learning) environment where an LLM agent learns to debug malformed API requests. The agent receives a broken HTTP request along with its API specification, and must:
+An RL (Reinforcement Learning) environment where an LLM agent learns to debug malformed API requests and validate API responses. The agent receives a broken HTTP request along with its API specification, and must handle 6 progressively harder tasks:
 
-- **Easy task**: Identify what type of error is present and which fields are affected
-- **Medium task**: Actually fix the request so it matches the spec
-- **Hard task**: Fix the request (which now has 2-3 simultaneous errors) AND write a developer-facing explanation of what went wrong
+- **Easy**: Identify the error type and affected fields (single error)
+- **Classify**: Identify ALL error types and fields across multiple simultaneous errors
+- **Medium**: Fix the broken request body to match the spec
+- **Headers**: Fix header-level errors (auth, content-type, expired tokens)
+- **Response**: Validate API responses for wrong status codes, missing fields, data leaks
+- **Hard**: Fix multi-error requests (including chained dependencies) and explain the fix
 
-This is built on the **OpenEnv framework** (by Meta/PyTorch) which standardizes how RL environments expose themselves to training agents via WebSocket.
+Built on the **OpenEnv framework** (by Meta/PyTorch), with 45 API specs across 9 domains, 15 error types, 5 chained error patterns, GRPO training pipeline, and 6-level curriculum learning.
 
 ---
 
@@ -89,8 +92,8 @@ This is built on the **OpenEnv framework** (by Meta/PyTorch) which standardizes 
     +---------v--+  +--------v---+  +--------v--------+
     | api_specs  |  | error_     |  | environment.py  |
     | .py        |  | injectors  |  | (core logic)    |
-    | 30 specs   |  | .py        |  | reset(), step() |
-    | 6 domains  |  | 10 types   |  | 3 graders       |
+    | 45 specs   |  | .py        |  | reset(), step() |
+    | 9 domains  |  | 15 types   |  | 6 graders       |
     +------------+  +------------+  +---------+-------+
                                               |
                                     +---------v-------+
@@ -475,34 +478,49 @@ Scores from running `inference.py` against the live HF Space (3 episodes per tas
 
 ---
 
-## Scope for Advancement (Round 2)
+## Implemented Advancements (Round 2)
 
-Five concrete improvements for the 48-hour in-person hackathon:
+All five advancement items from the original roadmap have been implemented:
 
-### 1. GRPO/PPO Training Pipeline
-**What**: Build an actual RL training loop using GRPO (Group Relative Policy Optimization) or PPO that trains a smaller model (e.g., Qwen 2.5-1.5B) on our environment.
-**Why**: Right now we only have inference (prompting a pre-trained model). Showing that a model improves through RL training on our environment proves the environment has real training value.
-**How**: Use TRL/vLLM with our environment as the reward signal. The model generates fix attempts, the environment scores them, and the policy updates.
+### 1. GRPO Training Pipeline (IMPLEMENTED)
+**What**: Full GRPO training loop in `training/train.py` that trains Qwen 0.5B on the live environment using TRL's GRPOTrainer with vLLM colocate mode.
+**How it works**: The model generates JSON debugging attempts, the environment grades them via its deterministic graders, and GRPO updates the policy to prefer higher-scoring responses. The rollout function connects to the live HF Space via WebSocket, runs multi-turn episodes, and returns prompt_ids, completion_ids, logprobs, and env_reward.
+**Key config**: `max_completion_length=128`, `gradient_accumulation_steps=16`, `vllm_gpu_memory_utilization=0.3`. Runs on free Colab T4 GPU.
 
-### 2. More API Specs and Domains
-**What**: Expand from 30 specs / 6 domains to 100+ specs / 15+ domains.
-**Why**: More diversity means better generalization during training. Could add GraphQL, gRPC, WebSocket protocols, OAuth flows, pagination patterns.
-**How**: Each spec is a single `_spec()` call in `api_specs.py`. Adding new ones is mechanical but the domain knowledge matters.
+### 2. Expanded API Specs and Domains (IMPLEMENTED)
+**What**: Expanded from 30 specs / 6 domains to 45 specs / 9 domains.
+**New domains**: Analytics/Monitoring (dashboards, metrics, alerts), DevOps/Infrastructure (deployments, DNS, load balancers), AI/ML APIs (inference, fine-tuning, embeddings).
+**Impact**: 50% more scenario diversity for training generalization. Each domain uses realistic field types, headers, and validation rules.
 
-### 3. Chained Multi-Step Error Scenarios
-**What**: Errors that depend on each other. For example: the auth header is missing, which causes the response to be a 401, and the agent must fix the header first before the server reveals the body errors.
-**Why**: Current errors are independent (fixing one doesn't affect another). Chained errors test sequential reasoning and planning.
-**How**: New `inject_chained_errors()` that applies errors in a dependency order and reveals feedback progressively.
+### 3. Chained Multi-Step Error Scenarios (IMPLEMENTED)
+**What**: 5 chain patterns where fixing one error reveals the next, simulating real-world API debugging.
+**Chain patterns**:
+- **auth_gate**: Missing/expired auth blocks body error visibility
+- **content_type_gate**: Wrong content type masks type/value errors
+- **method_chain**: Wrong HTTP method hides field-level errors
+- **rate_limit_chain**: Rate limit headers combined with auth/field errors
+- **redirect_chain**: Redirect loops combined with type/format errors
 
-### 4. Response Validation (Not Just Request Fixing)
-**What**: New task type where the agent receives a request-response pair and must identify what's wrong with the response (wrong status code, missing fields, incorrect error format).
-**Why**: API debugging isn't just about requests. Response validation is equally important and tests a different skill.
-**How**: New task type `"response_validation"` with its own grader that checks if the agent correctly identifies response-level issues.
+**How it works**: `inject_chained_errors()` picks a random chain pattern, applies the gate error first, then injects body errors from the pattern's pool. The hard task uses chained errors 50% of the time.
 
-### 5. Curriculum Learning Integration
-**What**: Automatically adjust difficulty based on the agent's performance. Start with easy single-error scenarios, graduate to hard multi-error as the agent improves.
-**Why**: Fixed difficulty progression (easy -> medium -> hard) isn't optimal for RL training. Curriculum learning keeps the agent in the zone of proximal development.
-**How**: Track rolling average reward per task. When average exceeds threshold, unlock next difficulty. Could also dynamically adjust error count within hard mode.
+### 4. Response Validation Task (IMPLEMENTED)
+**What**: 6th task where the agent receives a request-response pair and identifies response issues.
+**Issue types**: wrong_status_code, missing_response_field, wrong_response_type, extra_response_field (data leak detection), inconsistent_error_format.
+**Grading**: 0.5 x Jaccard(issue_types) + 0.3 x Jaccard(affected_fields) + 0.2 x status_code_match.
+**8 response templates** covering: Create, List, Update, Delete, Batch, Authentication, File Upload, Search operations.
+
+### 5. Curriculum Learning (IMPLEMENTED)
+**What**: Both training-side and environment-side curriculum learning.
+**Training side** (`training/train.py`): 6-level curriculum that auto-promotes through easy -> classify -> medium -> headers -> response -> hard based on rolling average reward exceeding thresholds (0.7, 0.6, 0.6, 0.5, 0.5).
+**Environment side** (`task="auto"`): The environment itself tracks per-session reward history and auto-promotes, so any client can benefit from adaptive difficulty without implementing curriculum logic.
+
+### Scope for Further Advancement
+
+- **GraphQL and gRPC protocols**: Add non-REST API specs for cross-protocol debugging
+- **OAuth flow simulation**: Multi-step auth flows with token refresh, scope validation
+- **Response body fixing**: Agent generates the correct response body, not just identifies issues
+- **Multi-agent debugging**: Two agents collaborate on different aspects (headers vs body)
+- **Real-world API replay**: Import failed requests from production logs for training data
 
 ---
 
