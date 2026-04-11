@@ -141,7 +141,9 @@ def parse_llm_response(text: str) -> dict:
     return {}
 
 
-def build_action(data: dict) -> APIDebugAction:
+def build_action(data) -> APIDebugAction:
+    if not isinstance(data, dict):
+        return APIDebugAction()
     fixed_req = data.get("fixed_request")
     if isinstance(fixed_req, dict):
         fixed_req = json.dumps(fixed_req)
