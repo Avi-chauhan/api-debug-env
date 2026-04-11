@@ -1,0 +1,6 @@
+trl>=0.26.0
+transformers
+torch
+datasets
+openenv-core
+openai
