@@ -623,7 +623,319 @@ CALENDAR_AUTH_SPECS = [
 ]
 
 
-# All 30 specs in a single flat list
+# =========================================================================
+# Domain 7: Analytics and Monitoring
+# =========================================================================
+
+ANALYTICS_SPECS = [
+    _spec(
+        api_name="Create Dashboard",
+        http_method="POST",
+        endpoint="/api/dashboards",
+        required_fields=["name", "workspace_id"],
+        optional_fields=["description", "layout", "shared"],
+        field_types={
+            "name": "string",
+            "workspace_id": "string",
+            "description": "string",
+            "layout": "enum:grid,freeform,list",
+            "shared": "boolean",
+        },
+        valid_example={
+            "name": "API Latency Overview",
+            "workspace_id": "ws_prod_001",
+        },
+    ),
+    _spec(
+        api_name="Add Metric",
+        http_method="POST",
+        endpoint="/api/metrics",
+        required_fields=["name", "type", "value"],
+        optional_fields=["tags", "timestamp", "unit"],
+        field_types={
+            "name": "string",
+            "type": "enum:counter,gauge,histogram,summary",
+            "value": "float",
+            "tags": "array",
+            "timestamp": "datetime",
+            "unit": "string",
+        },
+        valid_example={
+            "name": "api.request.duration",
+            "type": "histogram",
+            "value": 245.7,
+        },
+    ),
+    _spec(
+        api_name="Create Alert Rule",
+        http_method="POST",
+        endpoint="/api/alerts/rules",
+        required_fields=["name", "metric", "threshold", "condition"],
+        optional_fields=["description", "severity", "notification_channels"],
+        field_types={
+            "name": "string",
+            "metric": "string",
+            "threshold": "float",
+            "condition": "enum:above,below,equals",
+            "description": "string",
+            "severity": "enum:critical,warning,info",
+            "notification_channels": "array",
+        },
+        valid_example={
+            "name": "High Latency Alert",
+            "metric": "api.request.duration",
+            "threshold": 500.0,
+            "condition": "above",
+        },
+    ),
+    _spec(
+        api_name="Log Event",
+        http_method="POST",
+        endpoint="/api/logs",
+        required_fields=["level", "message", "service"],
+        optional_fields=["timestamp", "trace_id", "metadata"],
+        field_types={
+            "level": "enum:debug,info,warn,error,fatal",
+            "message": "string",
+            "service": "string",
+            "timestamp": "datetime",
+            "trace_id": "string",
+            "metadata": "object",
+        },
+        valid_example={
+            "level": "error",
+            "message": "Connection timeout to database",
+            "service": "payment-service",
+        },
+    ),
+    _spec(
+        api_name="Query Logs",
+        http_method="POST",
+        endpoint="/api/logs/search",
+        required_fields=["query", "start_time", "end_time"],
+        optional_fields=["limit", "service_filter", "level_filter"],
+        field_types={
+            "query": "string",
+            "start_time": "datetime",
+            "end_time": "datetime",
+            "limit": "integer",
+            "service_filter": "string",
+            "level_filter": "enum:debug,info,warn,error,fatal",
+        },
+        valid_example={
+            "query": "timeout OR connection refused",
+            "start_time": "2026-04-01T00:00:00Z",
+            "end_time": "2026-04-01T23:59:59Z",
+        },
+    ),
+]
+
+# =========================================================================
+# Domain 8: DevOps and Infrastructure
+# =========================================================================
+
+DEVOPS_SPECS = [
+    _spec(
+        api_name="Create Deployment",
+        http_method="POST",
+        endpoint="/api/deployments",
+        required_fields=["service_name", "image", "environment"],
+        optional_fields=["replicas", "cpu_limit", "memory_limit", "env_vars"],
+        field_types={
+            "service_name": "string",
+            "image": "string",
+            "environment": "enum:staging,production,development",
+            "replicas": "integer",
+            "cpu_limit": "string",
+            "memory_limit": "string",
+            "env_vars": "object",
+        },
+        valid_example={
+            "service_name": "api-gateway",
+            "image": "registry.io/api-gateway:v2.1.0",
+            "environment": "production",
+        },
+    ),
+    _spec(
+        api_name="Scale Service",
+        http_method="PATCH",
+        endpoint="/api/services/{service_id}/scale",
+        required_fields=["service_id", "replicas"],
+        optional_fields=["min_replicas", "max_replicas"],
+        field_types={
+            "service_id": "string",
+            "replicas": "integer",
+            "min_replicas": "integer",
+            "max_replicas": "integer",
+        },
+        valid_example={
+            "service_id": "svc_api_gateway",
+            "replicas": 5,
+        },
+    ),
+    _spec(
+        api_name="Create DNS Record",
+        http_method="POST",
+        endpoint="/api/dns/records",
+        required_fields=["domain", "type", "value"],
+        optional_fields=["ttl", "priority"],
+        field_types={
+            "domain": "string",
+            "type": "enum:A,AAAA,CNAME,MX,TXT,NS",
+            "value": "string",
+            "ttl": "integer",
+            "priority": "integer",
+        },
+        valid_example={
+            "domain": "api.example.com",
+            "type": "A",
+            "value": "203.0.113.50",
+        },
+    ),
+    _spec(
+        api_name="Add SSL Certificate",
+        http_method="POST",
+        endpoint="/api/certificates",
+        required_fields=["domain", "certificate", "private_key"],
+        optional_fields=["chain", "auto_renew"],
+        field_types={
+            "domain": "string",
+            "certificate": "string",
+            "private_key": "string",
+            "chain": "string",
+            "auto_renew": "boolean",
+        },
+        valid_example={
+            "domain": "api.example.com",
+            "certificate": "-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----",
+        },
+    ),
+    _spec(
+        api_name="Create Load Balancer",
+        http_method="POST",
+        endpoint="/api/load-balancers",
+        required_fields=["name", "algorithm", "targets"],
+        optional_fields=["health_check_path", "health_check_interval", "sticky_sessions"],
+        field_types={
+            "name": "string",
+            "algorithm": "enum:round_robin,least_connections,ip_hash,weighted",
+            "targets": "array",
+            "health_check_path": "string",
+            "health_check_interval": "integer",
+            "sticky_sessions": "boolean",
+        },
+        valid_example={
+            "name": "api-lb-prod",
+            "algorithm": "round_robin",
+            "targets": [
+                {"host": "10.0.1.1", "port": 8080},
+                {"host": "10.0.1.2", "port": 8080},
+            ],
+        },
+    ),
+]
+
+# =========================================================================
+# Domain 9: AI/ML APIs
+# =========================================================================
+
+AI_ML_SPECS = [
+    _spec(
+        api_name="Submit Inference",
+        http_method="POST",
+        endpoint="/api/inference",
+        required_fields=["model_id", "inputs"],
+        optional_fields=["parameters", "stream", "timeout"],
+        field_types={
+            "model_id": "string",
+            "inputs": "string",
+            "parameters": "object",
+            "stream": "boolean",
+            "timeout": "integer",
+        },
+        valid_example={
+            "model_id": "meta-llama/Llama-3-8B-Instruct",
+            "inputs": "Explain reinforcement learning in one sentence.",
+        },
+    ),
+    _spec(
+        api_name="Create Fine-tune Job",
+        http_method="POST",
+        endpoint="/api/fine-tune",
+        required_fields=["base_model", "dataset_id", "num_epochs"],
+        optional_fields=["learning_rate", "batch_size", "validation_split"],
+        field_types={
+            "base_model": "string",
+            "dataset_id": "string",
+            "num_epochs": "integer",
+            "learning_rate": "float",
+            "batch_size": "integer",
+            "validation_split": "float",
+        },
+        valid_example={
+            "base_model": "Qwen/Qwen2.5-0.5B",
+            "dataset_id": "ds_api_debug_v1",
+            "num_epochs": 3,
+        },
+    ),
+    _spec(
+        api_name="Upload Dataset",
+        http_method="POST",
+        endpoint="/api/datasets",
+        required_fields=["name", "format", "source_url"],
+        optional_fields=["description", "license", "tags"],
+        field_types={
+            "name": "string",
+            "format": "enum:json,csv,parquet,arrow",
+            "source_url": "url",
+            "description": "string",
+            "license": "string",
+            "tags": "array",
+        },
+        valid_example={
+            "name": "api-debug-training-v1",
+            "format": "json",
+            "source_url": "https://storage.example.com/datasets/api_debug.json",
+        },
+    ),
+    _spec(
+        api_name="Create Embedding",
+        http_method="POST",
+        endpoint="/api/embeddings",
+        required_fields=["model_id", "input"],
+        optional_fields=["encoding_format", "dimensions"],
+        field_types={
+            "model_id": "string",
+            "input": "string",
+            "encoding_format": "enum:float,base64",
+            "dimensions": "integer",
+        },
+        valid_example={
+            "model_id": "BAAI/bge-small-en-v1.5",
+            "input": "API debugging is a critical developer skill.",
+        },
+    ),
+    _spec(
+        api_name="List Models",
+        http_method="GET",
+        endpoint="/api/models",
+        required_fields=["task"],
+        optional_fields=["library", "sort", "limit"],
+        field_types={
+            "task": "enum:text-generation,text-classification,embeddings,image-classification",
+            "library": "string",
+            "sort": "enum:downloads,likes,trending",
+            "limit": "integer",
+        },
+        valid_example={
+            "task": "text-generation",
+        },
+    ),
+]
+
+
+# All 45 specs in a single flat list
 ALL_SPECS = (
     PAYMENT_SPECS
     + USER_SPECS
@@ -631,6 +943,9 @@ ALL_SPECS = (
     + MESSAGING_SPECS
     + ECOMMERCE_SPECS
     + CALENDAR_AUTH_SPECS
+    + ANALYTICS_SPECS
+    + DEVOPS_SPECS
+    + AI_ML_SPECS
 )
 
 
