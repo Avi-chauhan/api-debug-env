@@ -381,6 +381,111 @@ def inject_expired_token(
 
 
 # =========================================================================
+# 13. wrong_status_code (for response validation / chained scenarios)
+# =========================================================================
+
+def inject_wrong_status_code(
+    request: Dict[str, Any],
+    headers: Dict[str, str],
+    spec: Dict[str, Any],
+    rng: random_module.Random,
+) -> InjectorResult:
+    """Record that the wrong HTTP status code would be returned.
+
+    Simulates a server returning an unexpected status code.
+    The ground truth stores the wrong code and the expected code.
+    """
+    correct_status = 200 if spec["http_method"] == "GET" else 201
+    wrong_codes = [
+        (301, "Moved Permanently - resource redirected"),
+        (302, "Found - temporary redirect to different endpoint"),
+        (400, "Bad Request - but request is actually valid"),
+        (403, "Forbidden - incorrect permissions applied"),
+        (404, "Not Found - wrong endpoint routing"),
+        (429, "Too Many Requests - rate limit misconfigured"),
+        (500, "Internal Server Error - server-side issue"),
+        (502, "Bad Gateway - upstream service down"),
+        (503, "Service Unavailable - maintenance mode"),
+    ]
+    wrong_status, description = rng.choice(wrong_codes)
+    gt = _ground_truth("wrong_status_code", ["status_code"], request, headers)
+    gt["wrong_status"] = wrong_status
+    gt["correct_status"] = correct_status
+    gt["description"] = description
+    return request, headers, gt
+
+
+# =========================================================================
+# 14. redirect_loop
+# =========================================================================
+
+def inject_redirect_loop(
+    request: Dict[str, Any],
+    headers: Dict[str, str],
+    spec: Dict[str, Any],
+    rng: random_module.Random,
+) -> InjectorResult:
+    """Simulate a redirect chain issue.
+
+    The agent must identify that the endpoint redirects and provide
+    the correct target endpoint.
+    """
+    redirect_scenarios = [
+        {
+            "from": spec["endpoint"],
+            "to": spec["endpoint"].rstrip("/") + "/v2",
+            "reason": "API version upgrade - v1 redirects to v2",
+        },
+        {
+            "from": spec["endpoint"],
+            "to": spec["endpoint"].replace("/api/", "/api/v2/"),
+            "reason": "Base path migration",
+        },
+        {
+            "from": spec["endpoint"],
+            "to": spec["endpoint"] + "?format=json",
+            "reason": "Content negotiation redirect",
+        },
+    ]
+    scenario = rng.choice(redirect_scenarios)
+    gt = _ground_truth("redirect_loop", ["endpoint"], request, headers)
+    gt["redirect_from"] = scenario["from"]
+    gt["redirect_to"] = scenario["to"]
+    gt["reason"] = scenario["reason"]
+    return request, headers, gt
+
+
+# =========================================================================
+# 15. rate_limit_headers
+# =========================================================================
+
+def inject_rate_limit_headers(
+    request: Dict[str, Any],
+    headers: Dict[str, str],
+    spec: Dict[str, Any],
+    rng: random_module.Random,
+) -> InjectorResult:
+    """Inject missing or wrong rate limit headers.
+
+    Real APIs require headers like X-RateLimit-Limit, Retry-After.
+    The agent must identify the rate limiting issue and provide correct headers.
+    """
+    broken_headers = copy.deepcopy(headers)
+    # Add rate limit headers that indicate the client is being throttled
+    broken_headers["X-RateLimit-Remaining"] = "0"
+    broken_headers["X-RateLimit-Reset"] = "1712000000"
+    broken_headers["Retry-After"] = "60"
+
+    gt = _ground_truth(
+        "rate_limit_headers",
+        ["X-RateLimit-Remaining", "Retry-After"],
+        request, headers,
+    )
+    gt["issue"] = "Client is rate-limited, must wait or reduce request frequency"
+    return request, broken_headers, gt
+
+
+# =========================================================================
 # Registry and helpers
 # =========================================================================
 
@@ -404,6 +509,9 @@ ERROR_TYPES = [
     "datetime_format_error",
     "wrong_content_type",
     "expired_auth_token",
+    "wrong_status_code",
+    "redirect_loop",
+    "rate_limit_headers",
 ]
 
 INJECTOR_MAP = {
@@ -419,6 +527,9 @@ INJECTOR_MAP = {
     "datetime_format_error": inject_datetime_format_error,
     "wrong_content_type": inject_wrong_content_type,
     "expired_auth_token": inject_expired_token,
+    "wrong_status_code": inject_wrong_status_code,
+    "redirect_loop": inject_redirect_loop,
+    "rate_limit_headers": inject_rate_limit_headers,
 }
 
 
@@ -432,6 +543,89 @@ def inject_error(
     """Inject a single error of the specified type."""
     injector = INJECTOR_MAP[error_type]
     return injector(request, headers, spec, rng)
+
+
+# Chain patterns for realistic multi-step debugging scenarios
+CHAIN_PATTERNS = [
+    # Pattern 1: Auth gate -> body errors
+    # Real-world: API returns 401 first, body validation only runs after auth passes
+    {
+        "name": "auth_gate",
+        "gate_types": ["missing_auth_header", "expired_auth_token"],
+        "body_pool": None,  # uses all body types
+    },
+    # Pattern 2: Content-type gate -> type mismatches
+    # Real-world: Wrong Content-Type causes parser to misinterpret the body
+    {
+        "name": "content_type_gate",
+        "gate_types": ["wrong_content_type"],
+        "body_pool": ["wrong_field_type", "malformed_json_value", "invalid_enum_value"],
+    },
+    # Pattern 3: Method + endpoint chain
+    # Real-world: Wrong method returns 405, then wrong fields for the correct method
+    {
+        "name": "method_chain",
+        "gate_types": ["wrong_http_method"],
+        "body_pool": ["missing_required_field", "extra_unknown_field", "null_value_in_required"],
+    },
+    # Pattern 4: Rate limit + auth
+    # Real-world: Rate limited, and when retrying the token has expired
+    {
+        "name": "rate_limit_chain",
+        "gate_types": ["rate_limit_headers"],
+        "body_pool": ["expired_auth_token", "missing_required_field"],
+    },
+    # Pattern 5: Redirect + body errors
+    # Real-world: Endpoint moved, client follows redirect but sends wrong body format
+    {
+        "name": "redirect_chain",
+        "gate_types": ["redirect_loop"],
+        "body_pool": ["wrong_field_type", "datetime_format_error", "invalid_email_format"],
+    },
+]
+
+
+def inject_chained_errors(
+    request: Dict[str, Any],
+    headers: Dict[str, str],
+    spec: Dict[str, Any],
+    rng: random_module.Random,
+    count: int = 2,
+) -> Tuple[Dict[str, Any], Dict[str, str], List[GroundTruth]]:
+    """Inject errors in a realistic dependency chain.
+
+    Picks a chain pattern, injects the gate error first, then body errors.
+    Ground truths are ordered: gate errors first, body errors second.
+    This ordering lets the environment progressively reveal errors.
+    """
+    broken_req = copy.deepcopy(request)
+    broken_hdrs = copy.deepcopy(headers)
+    chain: List[GroundTruth] = []
+
+    # Pick a random chain pattern
+    pattern = rng.choice(CHAIN_PATTERNS)
+
+    # Inject the gate error
+    gate_type = rng.choice(pattern["gate_types"])
+    injector = INJECTOR_MAP[gate_type]
+    broken_req, broken_hdrs, gt = injector(broken_req, broken_hdrs, spec, rng)
+    chain.append(gt)
+
+    # Inject body errors from the pattern's pool (or all body types)
+    body_pool = pattern["body_pool"]
+    if body_pool is None:
+        body_pool = [t for t in ERROR_TYPES if t not in HEADER_ERROR_TYPES
+                     and t not in ("wrong_status_code", "redirect_loop", "rate_limit_headers")]
+
+    body_count = max(1, count - 1)
+    available = [t for t in body_pool if t in INJECTOR_MAP]
+    chosen = rng.sample(available, min(body_count, len(available)))
+    for err_type in chosen:
+        injector = INJECTOR_MAP[err_type]
+        broken_req, broken_hdrs, gt = injector(broken_req, broken_hdrs, spec, rng)
+        chain.append(gt)
+
+    return broken_req, broken_hdrs, chain
 
 
 def inject_multiple_errors(

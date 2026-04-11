@@ -27,6 +27,7 @@ from .api_specs import get_random_spec
 from .error_injectors import (
     ERROR_TYPES,
     HEADER_ERROR_TYPES,
+    inject_chained_errors,
     inject_error,
     inject_multiple_errors,
 )
@@ -117,7 +118,22 @@ class APIDebugEnvironment(Environment):
         valid_headers = copy.deepcopy(self.spec["required_headers"])
 
         # Inject errors based on difficulty
-        if self.task in ("hard", "classify"):
+        if self.task == "hard":
+            error_count = self.rng.randint(config["min_errors"], config["max_errors"])
+            # 50% chance of chained errors (header gate + body errors)
+            if self.rng.random() < 0.5:
+                self.broken_request, self.broken_headers, self.ground_truths = (
+                    inject_chained_errors(
+                        valid_request, valid_headers, self.spec, self.rng, error_count
+                    )
+                )
+            else:
+                self.broken_request, self.broken_headers, self.ground_truths = (
+                    inject_multiple_errors(
+                        valid_request, valid_headers, self.spec, self.rng, error_count
+                    )
+                )
+        elif self.task == "classify":
             error_count = self.rng.randint(config["min_errors"], config["max_errors"])
             self.broken_request, self.broken_headers, self.ground_truths = (
                 inject_multiple_errors(
