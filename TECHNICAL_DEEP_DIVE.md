@@ -465,16 +465,24 @@ Comprehensive test coverage:
 
 ## Baseline Results
 
-Scores from running `inference.py` against the live HF Space (3 episodes per task):
+Scores from running `inference.py` against the live HF Space (3 episodes per task, all 6 tasks):
 
-| Task | Episodes | Qwen2.5-72B-Instruct | gpt-4o-mini |
-|------|----------|----------------------|-------------|
-| easy | 3 | 0.999 | 0.667 |
-| medium | 3 | 0.999 | 0.999 |
-| hard | 3 | 0.780 | 0.760 |
-| **overall** | **9** | **0.926** | **0.809** |
+| Task | Qwen2.5-72B-Instruct | gpt-4o-mini |
+|------|----------------------|-------------|
+| easy | 0.999 | 0.799 |
+| classify | 0.600 | 0.660 |
+| medium | 0.999 | 0.999 |
+| headers | 0.700 | 0.760 |
+| response | 0.518 | 0.521 |
+| hard | 0.830 | 0.713 |
+| **overall** | **0.774** | **0.742** |
 
-**Key takeaway**: Larger models perform better on hard tasks (explanation quality + multi-error fixing), showing meaningful difficulty progression. The environment is not trivially solvable but also not impossibly hard.
+**Key takeaways**:
+- Both models solve easy and medium near-perfectly (single error identification/fixing is straightforward for strong LLMs)
+- Classify (multi-error identification) and headers (header-specific debugging) show meaningful difficulty -- models score 0.6-0.76
+- Response validation is the hardest new task (~0.52) -- identifying response-level issues requires different reasoning than request debugging
+- Hard task with chained errors and explanation requirement shows clear difficulty progression (0.71-0.83)
+- The environment is not trivially solvable but also not impossibly hard, exactly the right range for RL training value
 
 ---
 
