@@ -146,6 +146,16 @@ The hard task uses an LLM (gpt-4o-mini via OpenAI API) to evaluate explanation q
 
 If the LLM judge is unavailable, the environment falls back to a keyword + length heuristic that ensures non-zero scores for reasonable explanations. A 10-second timeout on the judge call prevents blocking the episode if the LLM is slow.
 
+To use a dedicated judge model (recommended to avoid the agent grading itself):
+
+```bash
+export JUDGE_MODEL=gpt-4o-mini
+export JUDGE_API_BASE=https://api.openai.com/v1
+export JUDGE_API_KEY=sk-your-key
+```
+
+If not set, the judge falls back to the agent's model (`MODEL_NAME`), then to the heuristic.
+
 ## Baseline Scores
 
 Scores from running inference.py against the live HF Space (3 episodes per task, LLM-as-judge active for hard):

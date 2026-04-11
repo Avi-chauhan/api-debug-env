@@ -599,10 +599,15 @@ class APIDebugEnvironment(Environment):
         return self._heuristic_score_explanation(explanation)
 
     def _llm_judge_explanation(self, explanation: str) -> Optional[float]:
-        """Call LLM to score the explanation. Returns None if unavailable."""
-        api_base = os.getenv("API_BASE_URL")
-        api_key = os.getenv("HF_TOKEN")
-        model = os.getenv("MODEL_NAME")
+        """Call LLM to score the explanation. Returns None if unavailable.
+
+        Uses dedicated judge model (JUDGE_MODEL / JUDGE_API_BASE / JUDGE_API_KEY)
+        to avoid the agent grading itself. Falls back to the agent's model env
+        vars if judge-specific vars are not set.
+        """
+        api_base = os.getenv("JUDGE_API_BASE") or os.getenv("API_BASE_URL")
+        api_key = os.getenv("JUDGE_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("HF_TOKEN")
+        model = os.getenv("JUDGE_MODEL") or os.getenv("MODEL_NAME")
 
         if not all([api_base, api_key, model]):
             return None
