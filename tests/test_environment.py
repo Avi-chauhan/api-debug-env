@@ -354,6 +354,80 @@ class TestMediumGrader:
 
 
 # ---------------------------------------------------------------------------
+# TestHeadersGrader
+# ---------------------------------------------------------------------------
+
+class TestHeadersGrader:
+    """Tests for the headers task: header-focused debugging."""
+
+    def test_correct_headers_and_type_scores_high(self):
+        env = make_env("headers", seed=42)
+        gt = env.ground_truths[0]
+        obs = env.step(APIDebugAction(
+            error_type=gt["error_type"],
+            fixed_headers=gt["valid_headers"],
+        ))
+        assert obs.reward >= 0.9
+
+    def test_correct_headers_no_type_scores_partial(self):
+        env = make_env("headers", seed=42)
+        gt = env.ground_truths[0]
+        obs = env.step(APIDebugAction(
+            fixed_headers=gt["valid_headers"],
+        ))
+        # 0.7 for headers, 0 for type = ~0.7
+        assert 0.5 < obs.reward < 0.9
+
+    def test_correct_type_no_headers_scores_low(self):
+        env = make_env("headers", seed=42)
+        gt = env.ground_truths[0]
+        obs = env.step(APIDebugAction(
+            error_type=gt["error_type"],
+        ))
+        # 0.3 for type, 0 for headers
+        assert obs.reward < 0.5
+
+    def test_empty_action_scores_near_0(self):
+        env = make_env("headers", seed=42)
+        obs = env.step(APIDebugAction())
+        assert obs.reward <= 0.01
+
+    def test_max_steps_is_4(self):
+        env = make_env("headers", seed=42)
+        assert env.max_steps == 4
+
+    def test_header_error_type_is_header_related(self):
+        env = make_env("headers", seed=42)
+        header_types = {"missing_auth_header", "wrong_content_type", "expired_auth_token"}
+        for gt in env.ground_truths:
+            assert gt["error_type"] in header_types
+
+    def test_feedback_contains_header_info(self):
+        env = make_env("headers", seed=42)
+        gt = env.ground_truths[0]
+        obs = env.step(APIDebugAction(fixed_headers=gt["valid_headers"]))
+        assert "Header" in obs.feedback or "error_type" in obs.feedback
+
+    def test_wrong_headers_score_low(self):
+        env = make_env("headers", seed=42)
+        obs = env.step(APIDebugAction(
+            fixed_headers={"X-Wrong": "value"},
+        ))
+        assert obs.reward < 0.5
+
+    def test_reward_in_valid_range(self):
+        env = make_env("headers", seed=42)
+        obs = env.step(APIDebugAction(
+            fixed_headers={"Authorization": "Bearer test"},
+        ))
+        assert 0.001 <= obs.reward <= 0.999
+
+    def test_single_ground_truth(self):
+        env = make_env("headers", seed=42)
+        assert len(env.ground_truths) == 1
+
+
+# ---------------------------------------------------------------------------
 # TestHardGrader
 # ---------------------------------------------------------------------------
 

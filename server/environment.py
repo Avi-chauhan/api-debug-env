@@ -26,6 +26,7 @@ except ImportError:
 from .api_specs import get_random_spec
 from .error_injectors import (
     ERROR_TYPES,
+    HEADER_ERROR_TYPES,
     inject_error,
     inject_multiple_errors,
 )
@@ -41,6 +42,7 @@ TASK_CONFIG = {
     "easy": {"max_steps": 3, "error_count": 1},
     "classify": {"max_steps": 4, "min_errors": 2, "max_errors": 3},
     "medium": {"max_steps": 5, "error_count": 1},
+    "headers": {"max_steps": 4, "error_count": 1},
     "hard": {"max_steps": 7, "min_errors": 2, "max_errors": 3},
 }
 
@@ -122,6 +124,12 @@ class APIDebugEnvironment(Environment):
                     valid_request, valid_headers, self.spec, self.rng, error_count
                 )
             )
+        elif self.task == "headers":
+            error_type = self.rng.choice(HEADER_ERROR_TYPES)
+            self.broken_request, self.broken_headers, gt = inject_error(
+                error_type, valid_request, valid_headers, self.spec, self.rng
+            )
+            self.ground_truths = [gt]
         else:
             error_type = self.rng.choice(ERROR_TYPES)
             self.broken_request, self.broken_headers, gt = inject_error(
@@ -186,6 +194,8 @@ class APIDebugEnvironment(Environment):
             raw_score, feedback = self._grade_classify(action)
         elif self.task == "medium":
             raw_score, feedback = self._grade_medium(action)
+        elif self.task == "headers":
+            raw_score, feedback = self._grade_headers(action)
         else:
             raw_score, feedback = self._grade_hard(action)
 
@@ -361,6 +371,38 @@ class APIDebugEnvironment(Environment):
             feedback = body_feedback
 
         return round(total_score, 4), feedback
+
+    def _grade_headers(self, action: APIDebugAction) -> Tuple[float, str]:
+        """Grade header fix. Fully deterministic.
+
+        The agent must provide corrected headers that match the spec.
+        Also awards partial credit for identifying the error type.
+
+        Scoring: 0.7 for correct headers + 0.3 for error type identification.
+        """
+        score = 0.0
+        parts = []
+
+        # Error type identification (0.3 weight)
+        gt_types = {gt["error_type"] for gt in self.ground_truths}
+        if action.error_type and action.error_type in gt_types:
+            score += 0.3
+            parts.append("error_type: CORRECT")
+        else:
+            given = action.error_type or "(none)"
+            parts.append(f"error_type: INCORRECT (you said '{given}')")
+
+        # Header fix validation (0.7 weight)
+        if action.fixed_headers:
+            header_score, header_feedback = validate_headers_against_spec(
+                action.fixed_headers, self.spec
+            )
+            score += 0.7 * header_score
+            parts.append(header_feedback)
+        else:
+            parts.append("Headers: NOT PROVIDED (header fix needed)")
+
+        return round(score, 4), "; ".join(parts)
 
     def _grade_hard(self, action: APIDebugAction) -> Tuple[float, str]:
         """Grade fix + explanation. 70% deterministic fix, 30% explanation.

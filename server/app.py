@@ -51,6 +51,13 @@ def list_tasks():
                 "description": "Fix the broken request to match the API spec",
             },
             {
+                "name": "headers",
+                "max_steps": 4,
+                "error_count": 1,
+                "grading": "deterministic",
+                "description": "Fix request headers (auth, content-type, tokens)",
+            },
+            {
                 "name": "hard",
                 "max_steps": 7,
                 "error_count": "2-3",
@@ -69,6 +76,8 @@ def list_tasks():
             "malformed_json_value",
             "invalid_enum_value",
             "datetime_format_error",
+            "wrong_content_type",
+            "expired_auth_token",
         ],
         "api_spec_count": 30,
     })

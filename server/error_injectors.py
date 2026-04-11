@@ -325,8 +325,71 @@ def inject_datetime_format_error(
 
 
 # =========================================================================
+# 11. wrong_content_type
+# =========================================================================
+
+def inject_wrong_content_type(
+    request: Dict[str, Any],
+    headers: Dict[str, str],
+    spec: Dict[str, Any],
+    rng: random_module.Random,
+) -> InjectorResult:
+    """Change Content-Type to an incorrect value."""
+    broken_headers = copy.deepcopy(headers)
+    wrong_types = [
+        "text/plain",
+        "application/xml",
+        "multipart/form-data",
+        "text/html",
+        "application/x-www-form-urlencoded",
+    ]
+    if "Content-Type" in broken_headers:
+        broken_headers["Content-Type"] = rng.choice(wrong_types)
+    else:
+        broken_headers["Content-Type"] = rng.choice(wrong_types)
+    return request, broken_headers, _ground_truth(
+        "wrong_content_type", ["Content-Type"], request, headers
+    )
+
+
+# =========================================================================
+# 12. expired_auth_token
+# =========================================================================
+
+def inject_expired_token(
+    request: Dict[str, Any],
+    headers: Dict[str, str],
+    spec: Dict[str, Any],
+    rng: random_module.Random,
+) -> InjectorResult:
+    """Replace the Authorization token with an expired/malformed one."""
+    broken_headers = copy.deepcopy(headers)
+    bad_tokens = [
+        "Bearer expired_token_abc123",
+        "Bearer ",
+        "Basic dXNlcjpwYXNz",
+        "Token invalid",
+        "Bearer eyJhbGciOiJub25lIn0.e30.",
+    ]
+    if "Authorization" in broken_headers:
+        broken_headers["Authorization"] = rng.choice(bad_tokens)
+        return request, broken_headers, _ground_truth(
+            "expired_auth_token", ["Authorization"], request, headers
+        )
+    # If no auth header in spec, inject wrong content type instead
+    return inject_wrong_content_type(request, headers, spec, rng)
+
+
+# =========================================================================
 # Registry and helpers
 # =========================================================================
+
+# Header-only error types (used by the headers task)
+HEADER_ERROR_TYPES = [
+    "missing_auth_header",
+    "wrong_content_type",
+    "expired_auth_token",
+]
 
 ERROR_TYPES = [
     "missing_required_field",
@@ -339,6 +402,8 @@ ERROR_TYPES = [
     "malformed_json_value",
     "invalid_enum_value",
     "datetime_format_error",
+    "wrong_content_type",
+    "expired_auth_token",
 ]
 
 INJECTOR_MAP = {
@@ -352,6 +417,8 @@ INJECTOR_MAP = {
     "malformed_json_value": inject_malformed_json_value,
     "invalid_enum_value": inject_invalid_enum_value,
     "datetime_format_error": inject_datetime_format_error,
+    "wrong_content_type": inject_wrong_content_type,
+    "expired_auth_token": inject_expired_token,
 }
 
 
