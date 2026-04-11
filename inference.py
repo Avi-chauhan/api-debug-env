@@ -34,9 +34,9 @@ ENV_URL = os.getenv("ENV_URL") or "https://avichauhan-api-debug-env.hf.space"
 IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 # Task configuration
-TASKS = ["easy", "medium", "hard"]
+TASKS = ["easy", "classify", "medium", "headers", "hard"]
 EPISODES_PER_TASK = 3
-MAX_STEPS = {"easy": 3, "medium": 5, "hard": 7}
+MAX_STEPS = {"easy": 3, "classify": 4, "medium": 5, "headers": 4, "hard": 7}
 BENCHMARK_NAME = "api_debug"
 
 
@@ -87,7 +87,21 @@ SYSTEM_PROMPTS = {
         missing_required_field, wrong_field_type, invalid_email_format,
         missing_auth_header, extra_unknown_field, null_value_in_required,
         wrong_http_method, malformed_json_value, invalid_enum_value,
-        datetime_format_error
+        datetime_format_error, wrong_content_type, expired_auth_token
+    """).strip(),
+
+    "classify": textwrap.dedent("""
+        You are an API debugging expert. You receive a broken API request with MULTIPLE errors.
+        Your job: identify ALL error types and ALL affected fields.
+
+        Respond with ONLY a JSON object in this format:
+        {"error_types": ["type1", "type2"], "affected_fields": ["field1", "field2"]}
+
+        Valid error types:
+        missing_required_field, wrong_field_type, invalid_email_format,
+        missing_auth_header, extra_unknown_field, null_value_in_required,
+        wrong_http_method, malformed_json_value, invalid_enum_value,
+        datetime_format_error, wrong_content_type, expired_auth_token
     """).strip(),
 
     "medium": textwrap.dedent("""
@@ -98,6 +112,19 @@ SYSTEM_PROMPTS = {
         {"fixed_request": "<valid JSON string matching the spec>", "fixed_headers": {"Header": "value"}}
 
         The fixed_request must be a valid JSON string. Include all required fields with correct types.
+    """).strip(),
+
+    "headers": textwrap.dedent("""
+        You are an API debugging expert. You receive a broken API request with header-level errors.
+        Your job: identify the header error type and provide the corrected headers.
+
+        Respond with ONLY a JSON object in this format:
+        {"error_type": "<type>", "fixed_headers": {"Header-Name": "correct-value"}}
+
+        Valid header error types:
+        missing_auth_header, wrong_content_type, expired_auth_token
+
+        Common headers: Authorization (Bearer token), Content-Type (application/json)
     """).strip(),
 
     "hard": textwrap.dedent("""
@@ -182,6 +209,7 @@ def build_action(data: dict) -> APIDebugAction:
 
     return APIDebugAction(
         error_type=data.get("error_type"),
+        error_types=data.get("error_types"),
         affected_fields=data.get("affected_fields"),
         fixed_request=fixed_req,
         fixed_headers=data.get("fixed_headers"),
@@ -264,9 +292,15 @@ def _action_summary(action: APIDebugAction, task: str) -> str:
     """Short summary of the action for logging."""
     if task == "easy":
         return f"diagnose:{action.error_type or 'none'}"
+    elif task == "classify":
+        types = action.error_types or [action.error_type or "none"]
+        return f"classify:{','.join(str(t) for t in types)}"
     elif task == "medium":
         fix_len = len(action.fixed_request or "")
         return f"fix:len={fix_len}"
+    elif task == "headers":
+        hdr_count = len(action.fixed_headers or {})
+        return f"headers:{action.error_type or 'none'}+fix:{hdr_count}"
     else:
         fix_len = len(action.fixed_request or "")
         exp_len = len(action.explanation or "")
